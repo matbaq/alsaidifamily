@@ -25,10 +25,10 @@ class TreeLayoutResult {
 class TidyTreeLayout {
   static const double nodeWidth   = 120.0;
   static const double nodeHeight  = 140.0;
-  static const double siblingGap  = 28.0;
-  static const double verticalGap = 70.0;
-  static const double rootGap     = 60.0;
-  static const double padding     = 60.0;
+  static const double siblingGap  = 35.0;
+  static const double verticalGap = 120.0;
+  static const double rootGap     = 100.0;
+  static const double padding     = 100.0;
 
   static TreeLayoutResult layout(List<TreeNode> roots) {
     if (roots.isEmpty) {
@@ -73,7 +73,6 @@ class TidyTreeLayout {
         childLeft += (subtreeWidth[c.id] ?? nodeWidth) + siblingGap;
       }
 
-      // الأب فوق مركز أبنائه المباشرين
       final firstCX = nodeXCenter[n.children.first.id]!;
       final lastCX  = nodeXCenter[n.children.last.id]!;
       final parentCX = (firstCX + lastCX) / 2;
@@ -81,7 +80,6 @@ class TidyTreeLayout {
       positions.add(NodePosition(node: n, x: parentCX - nodeWidth / 2, y: y, level: level));
     }
 
-    // ترتيب الجذور: الأصغر أولاً
     final sortedRoots = List<TreeNode>.from(roots)
       ..sort((a, b) => (subtreeWidth[a.id] ?? 0).compareTo(subtreeWidth[b.id] ?? 0));
 
@@ -91,7 +89,6 @@ class TidyTreeLayout {
       currentLeft += (subtreeWidth[r.id] ?? nodeWidth) + rootGap;
     }
 
-    // إعادة ترتيب: الأب قبل أبنائه للـ painter
     final posById = <String, NodePosition>{};
     for (final p in positions) posById[p.node.id] = p;
 

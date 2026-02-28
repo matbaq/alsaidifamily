@@ -10,10 +10,7 @@ class CustomFamilyTreeView extends StatefulWidget {
   final List<TreeNode> roots;
   final Function(TreeNode)? onNodeTap;
   final String? selectedNodeId;
-
-  /// ✅ إذا تم تمريره: الصفحة الخارجية هي المسؤولة عن الزوم/التحريك (Fit/Center)
   final TransformationController? externalController;
-
   final void Function(Map<String, Offset> centers, Rect bounds, Size canvasSize)? onLayoutReady;
   final void Function(String nodeId)? onToggleChildren;
 
@@ -34,16 +31,14 @@ class CustomFamilyTreeView extends StatefulWidget {
 class _CustomFamilyTreeViewState extends State<CustomFamilyTreeView> {
   late final TransformationController _controller;
   bool _ownsController = false;
-
   List<NodePosition> _positions = [];
   Size _treeSize = const Size(400, 400);
   int _lastFingerprint = 0;
-
   bool _didInitialZoom = false;
 
   static const double nodeWidth = 120.0;
   static const double nodeHeight = 140.0;
-  static const double minScale = 0.04;
+  static const double minScale = 0.01;
   static const double maxScale = 5.0;
 
   final Set<String> _visibleIds = {};
@@ -56,7 +51,6 @@ class _CustomFamilyTreeViewState extends State<CustomFamilyTreeView> {
     super.initState();
     _controller = widget.externalController ?? TransformationController();
     _ownsController = widget.externalController == null;
-
     _controller.addListener(_onTransformChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) => _rebuild(force: true));
   }
@@ -64,20 +58,14 @@ class _CustomFamilyTreeViewState extends State<CustomFamilyTreeView> {
   @override
   void didUpdateWidget(covariant CustomFamilyTreeView old) {
     super.didUpdateWidget(old);
-
-    // ✅ لو تغيّر controller الخارجي بين الريbuilds
     if (old.externalController != widget.externalController) {
       _controller.removeListener(_onTransformChanged);
       if (_ownsController) _controller.dispose();
-
       _controller = widget.externalController ?? TransformationController();
       _ownsController = widget.externalController == null;
       _controller.addListener(_onTransformChanged);
-
-      // لو صرنا داخليين، اسمح بزوم ابتدائي جديد
       _didInitialZoom = false;
     }
-
     _rebuild();
   }
 
@@ -100,7 +88,6 @@ class _CustomFamilyTreeViewState extends State<CustomFamilyTreeView> {
       h = 37 * h + (n.isCollapsed ? 1 : 0);
       for (final c in n.children) visit(c);
     }
-
     for (final r in roots) visit(r);
     return h;
   }
@@ -111,7 +98,6 @@ class _CustomFamilyTreeViewState extends State<CustomFamilyTreeView> {
       _levelMap[n.id] = level;
       for (final c in n.children) visit(c, level + 1);
     }
-
     for (final r in roots) visit(r, 0);
   }
 
@@ -138,21 +124,16 @@ class _CustomFamilyTreeViewState extends State<CustomFamilyTreeView> {
     }
 
     _buildLevelMap(widget.roots);
-
     final result = TidyTreeLayout.layout(widget.roots);
     final canvasH = result.canvasSize.height;
-
     const pad = 60.0;
 
-    // قلب الشجرة: الجد أسفل، الأبناء فوقه
-    final flipped = result.positions
-        .map((p) => NodePosition(
+    final flipped = result.positions.map((p) => NodePosition(
       node: p.node,
       x: p.x,
       y: canvasH - p.y - nodeHeight,
       level: p.level,
-    ))
-        .toList();
+    )).toList();
 
     double minX = double.infinity, minY = double.infinity;
     double maxX = -double.infinity, maxY = -double.infinity;
@@ -165,22 +146,15 @@ class _CustomFamilyTreeViewState extends State<CustomFamilyTreeView> {
 
     final shiftX = -minX + pad;
     final shiftY = -minY + pad;
-
-    final normalized = flipped
-        .map((p) => NodePosition(
+    final normalized = flipped.map((p) => NodePosition(
       node: p.node,
       x: p.x + shiftX,
       y: p.y + shiftY,
       level: p.level,
-    ))
-        .toList();
+    )).toList();
 
     final newSize = Size((maxX - minX) + pad * 2, (maxY - minY) + pad * 2);
-
-    // ✅ إذا ما عندنا externalController: اسمح بزوم ابتدائي جديد بعد rebuild
-    if (!_usingExternalController) {
-      _didInitialZoom = false;
-    }
+    if (!_usingExternalController) _didInitialZoom = false;
 
     setState(() {
       _positions = normalized;
@@ -191,10 +165,7 @@ class _CustomFamilyTreeViewState extends State<CustomFamilyTreeView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _emitCenters();
-
-      // ✅ (الأهم) لا تعمل زوم داخلي إذا controller خارجي موجود
       _setInitialZoom();
-
       _updateVisible(force: true);
     });
   }
@@ -202,12 +173,10 @@ class _CustomFamilyTreeViewState extends State<CustomFamilyTreeView> {
   void _emitCenters() {
     final cb = widget.onLayoutReady;
     if (cb == null) return;
-
     final map = <String, Offset>{};
     for (final p in _positions) {
       map[p.node.id] = Offset(p.x + nodeWidth / 2, p.y + nodeHeight / 2);
     }
-
     cb(map, _computeBounds(), _treeSize);
   }
 
@@ -225,75 +194,53 @@ class _CustomFamilyTreeViewState extends State<CustomFamilyTreeView> {
   }
 
   void _setInitialZoom() {
-    // ✅ لو controller خارجي: الصفحة هي التي تتحكم بالزوم (Fit/Center)
     if (_usingExternalController) return;
-
     if (_didInitialZoom) return;
     _didInitialZoom = true;
-
     final screen = MediaQuery.of(context).size;
     const margin = 48.0;
-
     final sx = (screen.width - margin * 2) / _treeSize.width;
     final sy = (screen.height - margin * 2) / _treeSize.height;
     final scale = math.min(sx, sy).clamp(minScale, 1.5);
-
     final tx = (screen.width - _treeSize.width * scale) / 2;
     final ty = (screen.height - _treeSize.height * scale) / 2;
-
-    _controller.value = Matrix4.identity()
-      ..translate(tx, ty)
-      ..scale(scale);
+    _controller.value = Matrix4.identity()..translate(tx, ty)..scale(scale);
   }
 
   void _updateVisible({bool force = false}) {
     if (!mounted) return;
     final box = context.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return;
-
     final inv = Matrix4.inverted(_controller.value);
     Offset toScene(Offset p) {
       final v = inv.transform3(Vector3(p.dx, p.dy, 0));
       return Offset(v.x, v.y);
     }
-
     final vs = box.size;
     final tl = toScene(Offset.zero);
     final br = toScene(Offset(vs.width, vs.height));
-    final rect = Rect.fromPoints(tl, br).inflate(600);
-
+    final rect = Rect.fromPoints(tl, br).inflate(200);
     final newIds = <String>{};
     for (final p in _positions) {
       if (Rect.fromLTWH(p.x, p.y, nodeWidth, nodeHeight).overlaps(rect)) {
         newIds.add(p.node.id);
       }
     }
-
     if (newIds.isEmpty) {
-      for (final p in _positions) {
-        newIds.add(p.node.id);
-      }
+      for (final p in _positions) newIds.add(p.node.id);
     }
-
     if (!force && newIds.length == _visibleIds.length && _visibleIds.containsAll(newIds)) return;
-
     setState(() {
-      _visibleIds
-        ..clear()
-        ..addAll(newIds);
+      _visibleIds..clear()..addAll(newIds);
     });
   }
 
   @override
   Widget build(BuildContext context) {
     if (widget.roots.isEmpty) {
-      return const Center(
-        child: Text('لا توجد بيانات', style: TextStyle(fontSize: 18, color: Colors.grey)),
-      );
+      return const Center(child: Text('لا توجد بيانات', style: TextStyle(fontSize: 18, color: Colors.grey)));
     }
-
     final visiblePos = _positions.where((p) => _visibleIds.contains(p.node.id)).toList();
-
     return InteractiveViewer(
       transformationController: _controller,
       boundaryMargin: const EdgeInsets.all(800),
@@ -304,10 +251,7 @@ class _CustomFamilyTreeViewState extends State<CustomFamilyTreeView> {
         width: _treeSize.width,
         height: _treeSize.height,
         child: CustomPaint(
-          painter: FamilyTreePainter(
-            positions: _positions,
-            selectedNodeId: widget.selectedNodeId,
-          ),
+          painter: FamilyTreePainter(positions: _positions, selectedNodeId: widget.selectedNodeId),
           child: Stack(
             children: visiblePos.map((pos) {
               final level = _levelMap[pos.node.id] ?? pos.level;
@@ -319,9 +263,7 @@ class _CustomFamilyTreeViewState extends State<CustomFamilyTreeView> {
                   isSelected: pos.node.id == widget.selectedNodeId,
                   generationLevel: level,
                   onTap: () => widget.onNodeTap?.call(pos.node),
-                  onToggleChildren: widget.onToggleChildren == null
-                      ? null
-                      : () => widget.onToggleChildren!(pos.node.id),
+                  onToggleChildren: widget.onToggleChildren == null ? null : () => widget.onToggleChildren!(pos.node.id),
                 ),
               );
             }).toList(),

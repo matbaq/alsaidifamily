@@ -10,6 +10,8 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:printing/printing.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 
 import '../data/family_repository.dart';
 import '../models/family_member.dart';
@@ -50,6 +52,7 @@ class _FamilyTreePageState extends State<FamilyTreePage>
   final _searchCtrl     = TextEditingController();
   final _treeController = TransformationController();
   final GlobalKey _treeShotKey = GlobalKey();
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   String  _searchQuery = '';
   String? _selectedId;
@@ -59,7 +62,6 @@ class _FamilyTreePageState extends State<FamilyTreePage>
 
   Map<String, Offset> _nodeCenters = {};
   Rect? _treeBounds;
-  Size? _treeCanvasSize;
 
   int _lastFitKey = 0;
 
@@ -81,7 +83,10 @@ class _FamilyTreePageState extends State<FamilyTreePage>
     _searchCtrl.addListener(() {
       final q = _searchCtrl.text.toLowerCase().trim();
       if (q == _searchQuery) return;
-      setState(() => _searchQuery = q);
+      setState(() {
+        _searchQuery = q;
+        _selectedId = null;
+      });
       _lastFitKey++;
     });
   }
@@ -93,7 +98,52 @@ class _FamilyTreePageState extends State<FamilyTreePage>
     super.dispose();
   }
 
-  void _setInitialCollapse(List<FamilyMember> all) {}
+  void _setInitialCollapse(List<FamilyMember> all) {
+    if (_cachedAll != null) return;
+
+    final roots = all.where((m) => m.fatherId == null).toList();
+    for (final root in roots) {
+      _collapseSubtree(root.id, all, 0);
+    }
+  }
+
+  void _collapseSubtree(String id, List<FamilyMember> all, int level) {
+    final children = all.where((m) => m.fatherId == id).toList();
+    if (children.isEmpty) return;
+
+    if (level >= 1) {
+      _collapsedIds.add(id);
+    }
+
+    for (final child in children) {
+      _collapseSubtree(child.id, all, level + 1);
+    }
+  }
+
+  void _viewFullTree(List<FamilyMember> all) {
+    setState(() {
+      _searchQuery = '';
+      _selectedId = null;
+      _searchCtrl.clear();
+      _collapsedIds.clear();
+      _showSearch = false;
+    });
+    _lastFitKey++;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _fitTree());
+  }
+
+  void _expandAll(List<FamilyMember> all) {
+    setState(() {
+      _collapsedIds.clear();
+    });
+  }
+
+  void _collapseAll(List<FamilyMember> all) {
+    setState(() {
+      final idsWithChildren = all.map((x) => x.fatherId).whereType<String>().toSet();
+      _collapsedIds.addAll(idsWithChildren);
+    });
+  }
 
   void _fitTree() {
     if (_treeBounds == null) return;
@@ -107,7 +157,8 @@ class _FamilyTreePageState extends State<FamilyTreePage>
 
     final sx = availableW / (b.width + pad * 2);
     final sy = availableH / (b.height + pad * 2);
-    final scale = (sx < sy ? sx : sy).clamp(0.06, 2.2);
+
+    final scale = (sx < sy ? sx : sy).clamp(0.005, 2.2);
 
     final tx = (availableW - b.width * scale) / 2 - b.left * scale + pad * scale;
     final ty = (availableH - b.height * scale) / 2 - b.top  * scale + pad * scale;
@@ -168,24 +219,45 @@ class _FamilyTreePageState extends State<FamilyTreePage>
       .replaceAll(RegExp(r'[\u064B-\u0652]'), '');
 
   List<FamilyMember> _filter(List<FamilyMember> all) {
-    if (_searchQuery.isEmpty) return all;
+    if (_searchQuery.isEmpty && _selectedId == null) return all;
 
-    final q = _norm(_searchQuery);
     final visible = <String>{};
 
-    for (final m in all) {
-      if (_norm(m.name.toLowerCase()).contains(q)) {
-        visible.add(m.id);
-
-        String? pid = m.fatherId;
-        while (pid != null) {
-          if (visible.contains(pid)) break;
-          visible.add(pid);
-          try {
-            pid = all.firstWhere((x) => x.id == pid).fatherId;
-          } catch (_) {
-            pid = null;
+    if (_searchQuery.isNotEmpty) {
+      final q = _norm(_searchQuery);
+      for (final m in all) {
+        if (_norm(m.name.toLowerCase()).contains(q)) {
+          visible.add(m.id);
+          String? pid = m.fatherId;
+          while (pid != null) {
+            visible.add(pid);
+            try {
+              pid = all.firstWhere((x) => x.id == pid).fatherId;
+            } catch (_) {
+              pid = null;
+            }
           }
+        }
+      }
+    } else if (_selectedId != null) {
+      visible.add(_selectedId!);
+
+      void addChildren(String id) {
+        for (final m in all.where((x) => x.fatherId == id)) {
+          visible.add(m.id);
+          addChildren(m.id);
+        }
+      }
+
+      addChildren(_selectedId!);
+
+      String? pid = all.where((x) => x.id == _selectedId).firstOrNull?.fatherId;
+      while (pid != null) {
+        visible.add(pid);
+        try {
+          pid = all.firstWhere((x) => x.id == pid).fatherId;
+        } catch (_) {
+          pid = null;
         }
       }
     }
@@ -243,9 +315,9 @@ class _FamilyTreePageState extends State<FamilyTreePage>
     _cachedRoots = _buildTree(_cachedFiltered, all);
   }
 
-  Future<Uint8List?> _captureTreePng({double pixelRatio = 3}) async {
+  Future<Uint8List?> _captureTreePng({double pixelRatio = 2.0}) async {
     try {
-      final boundary = _treeShotKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      RenderRepaintBoundary? boundary = _treeShotKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) return null;
 
       final image = await boundary.toImage(pixelRatio: pixelRatio);
@@ -257,7 +329,7 @@ class _FamilyTreePageState extends State<FamilyTreePage>
   }
 
   Future<void> _shareTreeAsImage() async {
-    final bytes = await _captureTreePng(pixelRatio: 3);
+    final bytes = await _captureTreePng(pixelRatio: 2.5);
     if (bytes == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -278,7 +350,7 @@ class _FamilyTreePageState extends State<FamilyTreePage>
   }
 
   Future<void> _printTree() async {
-    final bytes = await _captureTreePng(pixelRatio: 3);
+    final bytes = await _captureTreePng(pixelRatio: 2.0);
     if (bytes == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -289,12 +361,24 @@ class _FamilyTreePageState extends State<FamilyTreePage>
     }
 
     await Printing.layoutPdf(
-      onLayout: (format) async {
-        final doc = await Printing.convertHtml(
-          format: format,
-          html: '<center><img src="data:image/png;base64,${base64Encode(bytes)}" style="width:100%"/></center>',
+      onLayout: (PdfPageFormat format) async {
+        final doc = pw.Document();
+        final image = pw.MemoryImage(bytes);
+
+        doc.addPage(
+          pw.Page(
+            pageFormat: format,
+            build: (pw.Context context) {
+              return pw.FullPage(
+                ignoreMargins: true,
+                child: pw.Center(
+                  child: pw.Image(image, fit: pw.BoxFit.contain),
+                ),
+              );
+            },
+          ),
         );
-        return doc;
+        return doc.save();
       },
     );
   }
@@ -366,13 +450,13 @@ class _FamilyTreePageState extends State<FamilyTreePage>
         member: m,
         father: father,
         children: children,
+        allMembers: all,
         isRoot: isRoot,
         isCollapsed: isCollapsed,
         isAdmin: _isAdmin,
         primary: primary,
         accent: accent,
         level: level,
-        allMembers: all,
         onToggle: () {
           _toggleCollapse(m.id);
           Navigator.pop(ctx);
@@ -420,6 +504,7 @@ class _FamilyTreePageState extends State<FamilyTreePage>
     );
 
     _isBottomSheetOpen = false;
+    setState(() => _selectedId = null);
   }
 
   int _getLevelOf(String id, List<FamilyMember> all) {
@@ -541,7 +626,9 @@ class _FamilyTreePageState extends State<FamilyTreePage>
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
       child: Scaffold(
+        key: _scaffoldKey,
         backgroundColor: isDark ? AppColors.bg : const Color(0xFFF0F4FF),
+        endDrawer: _buildFamilyIndexDrawer(),
         body: StreamBuilder<List<FamilyMember>>(
           stream: _repo.membersStream(),
           builder: (context, snap) {
@@ -618,95 +705,110 @@ class _FamilyTreePageState extends State<FamilyTreePage>
         ),
         child: Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(colors: [AppColors.goldDark, AppColors.gold]),
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: [BoxShadow(color: AppColors.gold.withValues(alpha: 0.4), blurRadius: 12)],
-              ),
-              child: const Icon(Icons.account_tree_rounded, color: Colors.white, size: 22),
-            ),
-            const SizedBox(width: 10),
+            const Icon(Icons.account_tree_rounded, color: AppColors.gold, size: 28),
+            const SizedBox(width: 8),
+
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'شجرة عائلة الصايدي',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: isDark ? Colors.white : Colors.black87,
-                    ),
-                  ),
-                  Text('${all.length} عضو', style: const TextStyle(fontSize: 12, color: AppColors.gold)),
-                ],
+              flex: 2,
+              child: Text(
+                'شجرة عائلة الصايدي',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
 
-            _appBarBtn(
-              icon: Icons.search_rounded,
-              isDark: isDark,
-              active: _showSearch,
-              onTap: () {
-                setState(() => _showSearch = !_showSearch);
-                _lastFitKey++;
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) _fitTree();
-                });
-              },
-            ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 4),
 
-            _appBarBtn(
-              icon: Icons.center_focus_strong_rounded,
-              isDark: isDark,
-              onTap: _fitTree,
-            ),
-            const SizedBox(width: 6),
-
-            _appBarBtn(
-              icon: Icons.ios_share_rounded,
-              isDark: isDark,
-              onTap: _shareTreeAsImage,
-            ),
-            const SizedBox(width: 6),
-
-            _appBarBtn(
-              icon: Icons.print_rounded,
-              isDark: isDark,
-              onTap: _printTree,
-            ),
-            const SizedBox(width: 6),
-
-            _appBarBtn(
-              icon: isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-              isDark: isDark,
-              onTap: () => widget.onThemeToggle(!isDark),
-            ),
-            const SizedBox(width: 6),
-
-            _appBarBtn(
-              icon: Icons.info_outline_rounded,
-              isDark: isDark,
-              onTap: _showAboutDialog,
-            ),
-            const SizedBox(width: 6),
-
-            _appBarBtn(
-              icon: _isAdmin ? Icons.logout_rounded : Icons.admin_panel_settings_rounded,
-              isDark: isDark,
-              gold: _isAdmin,
-              onTap: () async {
-                if (_isAdmin) {
-                  await _auth.signOut();
-                  if (mounted) setState(() {});
-                } else {
-                  final ok = await _showLogin();
-                  if (ok == true && mounted) setState(() {});
-                }
-              },
+            Expanded(
+              flex: 3,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                reverse: true,
+                child: Row(
+                  children: [
+                    _appBarBtn(
+                      icon: Icons.refresh_rounded,
+                      isDark: isDark,
+                      onTap: () => _viewFullTree(all),
+                      gold: true,
+                    ),
+                    const SizedBox(width: 6),
+                    _appBarBtn(
+                      icon: Icons.search_rounded,
+                      isDark: isDark,
+                      onTap: () => setState(() => _showSearch = !_showSearch),
+                      active: _showSearch,
+                    ),
+                    const SizedBox(width: 6),
+                    _appBarBtn(
+                      icon: Icons.menu_book_rounded,
+                      isDark: isDark,
+                      onTap: () => _scaffoldKey.currentState?.openEndDrawer(),
+                    ),
+                    const SizedBox(width: 6),
+                    _appBarBtn(
+                      icon: Icons.unfold_more_rounded,
+                      isDark: isDark,
+                      onTap: () => _expandAll(all),
+                    ),
+                    const SizedBox(width: 6),
+                    _appBarBtn(
+                      icon: Icons.unfold_less_rounded,
+                      isDark: isDark,
+                      onTap: () => _collapseAll(all),
+                    ),
+                    const SizedBox(width: 6),
+                    _appBarBtn(
+                      icon: Icons.center_focus_strong_rounded,
+                      isDark: isDark,
+                      onTap: _fitTree,
+                    ),
+                    const SizedBox(width: 6),
+                    _appBarBtn(
+                      icon: Icons.print_rounded,
+                      isDark: isDark,
+                      onTap: _printTree,
+                    ),
+                    const SizedBox(width: 6),
+                    _appBarBtn(
+                      icon: Icons.ios_share_rounded,
+                      isDark: isDark,
+                      onTap: _shareTreeAsImage,
+                    ),
+                    const SizedBox(width: 6),
+                    _appBarBtn(
+                      icon: isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                      isDark: isDark,
+                      onTap: () => widget.onThemeToggle(!isDark),
+                    ),
+                    const SizedBox(width: 6),
+                    _appBarBtn(
+                      icon: Icons.info_outline_rounded,
+                      isDark: isDark,
+                      onTap: _showAboutDialog,
+                    ),
+                    const SizedBox(width: 6),
+                    _appBarBtn(
+                      icon: _isAdmin ? Icons.logout_rounded : Icons.admin_panel_settings_rounded,
+                      isDark: isDark,
+                      gold: _isAdmin,
+                      onTap: () async {
+                        if (_isAdmin) {
+                          await _auth.signOut();
+                          if (mounted) setState(() {});
+                        } else {
+                          final ok = await _showLogin();
+                          if (ok == true && mounted) setState(() {});
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
@@ -724,14 +826,15 @@ class _FamilyTreePageState extends State<FamilyTreePage>
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 38, height: 38,
+        width: 36,
+        height: 36,
         decoration: BoxDecoration(
           color: gold
               ? AppColors.gold.withValues(alpha: 0.15)
               : active
-              ? AppColors.gold.withValues(alpha: 0.15)
+              ? AppColors.gold.withValues(alpha: 0.2)
               : (isDark ? AppColors.surface : Colors.white.withValues(alpha: 0.8)),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: (gold || active) ? AppColors.gold.withValues(alpha: 0.5) : Colors.transparent,
           ),
@@ -806,7 +909,6 @@ class _FamilyTreePageState extends State<FamilyTreePage>
       onLayoutReady: (centers, bounds, canvasSize) {
         _nodeCenters = centers;
         _treeBounds = bounds;
-        _treeCanvasSize = canvasSize;
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
@@ -873,6 +975,47 @@ class _FamilyTreePageState extends State<FamilyTreePage>
               fontSize: 13,
               fontWeight: FontWeight.w600,
               color: widget.isDarkMode ? Colors.white70 : Colors.black54,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFamilyIndexDrawer() {
+    return Drawer(
+      backgroundColor: widget.isDarkMode ? AppColors.bg : Colors.white,
+      child: Column(
+        children: [
+          DrawerHeader(
+            decoration: const BoxDecoration(gradient: LinearGradient(colors: [AppColors.goldDark, AppColors.gold])),
+            child: const Center(child: Text('دليل العائلات', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold))),
+          ),
+          Expanded(
+            child: StreamBuilder<List<FamilyMember>>(
+              stream: _repo.membersStream(),
+              builder: (context, snap) {
+                if (!snap.hasData) return const SizedBox();
+                final all = snap.data!;
+                final roots = all.where((m) => m.fatherId == null).toList();
+                final heads = all.where((m) => roots.any((r) => r.id == m.fatherId)).toList()..sort((a, b) => a.name.compareTo(b.name));
+                return ListView.builder(
+                  itemCount: heads.length,
+                  itemBuilder: (ctx, i) => ListTile(
+                    leading: const Icon(Icons.folder_shared, color: AppColors.gold),
+                    title: Text(heads[i].name, style: TextStyle(color: widget.isDarkMode ? Colors.white : Colors.black87)),
+                    onTap: () {
+                      setState(() {
+                        _selectedId = heads[i].id;
+                        _searchQuery = '';
+                        _searchCtrl.clear();
+                      });
+                      Navigator.pop(ctx);
+                      _centerOn(heads[i].id);
+                    },
+                  ),
+                );
+              },
             ),
           ),
         ],
