@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "479654662169",
+    "project_id": "alsaidy-app",
+    "storage_bucket": "alsaidy-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:479654662169:android:6ce960ac612f4530cf1a88",
+        "android_client_info": {
+          "package_name": "com.alsaidi.familytree.familytree"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCYjRbIDsrQaAuq-tEdNl4zSRY-Vvazy1U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
