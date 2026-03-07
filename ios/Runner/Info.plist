@@ -2,6 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 	<dict>
+
 		<key>CFBundleDevelopmentRegion</key>
 		<string>$(DEVELOPMENT_LANGUAGE)</string>
 
@@ -62,16 +63,25 @@
 		<key>UIApplicationSupportsIndirectInputEvents</key>
 		<true/>
 
+		<!-- Encryption declaration -->
 		<key>ITSAppUsesNonExemptEncryption</key>
 		<false/>
 
-		<key>NSPhotoLibraryUsageDescription</key>
-		<string>يحتاج التطبيق للوصول إلى الصور لإضافة صورة العضو.</string>
-
-		<key>NSPhotoLibraryAddUsageDescription</key>
-		<string>يحتاج التطبيق لحفظ الصور عند المشاركة أو التصدير.</string>
-
+		<!-- Camera permission -->
 		<key>NSCameraUsageDescription</key>
-		<string>يحتاج التطبيق لاستخدام الكاميرا لالتقاط صورة العضو.</string>
+		<string>يسمح التطبيق باستخدام الكاميرا لالتقاط صورة للعضو في شجرة العائلة.</string>
+
+		<!-- Photo library read permission -->
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>يسمح التطبيق باختيار صورة من مكتبة الصور لإضافة صورة للعضو.</string>
+
+		<!-- Photo library write permission -->
+		<key>NSPhotoLibraryAddUsageDescription</key>
+		<string>يسمح التطبيق بحفظ الصور التي يتم مشاركتها أو تصديرها.</string>
+
+		<!-- Microphone permission (sometimes required with camera) -->
+		<key>NSMicrophoneUsageDescription</key>
+		<string>التطبيق لا يستخدم الميكروفون ولكن قد يتطلبه النظام عند استخدام الكاميرا.</string>
+
 	</dict>
 </plist>
