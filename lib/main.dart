@@ -8,11 +8,17 @@ import 'widgets/splash_screen.dart';
 import 'screens/family_tree_page.dart';
 import 'controllers/access_controller.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    debugPrint('Firebase init error: $e');
+  }
+
   runApp(
     ChangeNotifierProvider(
       create: (_) => AccessController(),
@@ -30,6 +36,7 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   bool _isDarkMode = false;
+  bool _themeLoaded = false;
 
   @override
   void initState() {
@@ -38,15 +45,34 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _loadThemePreference() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _isDarkMode = prefs.getBool('isDarkMode') ?? false;
-    });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+
+      setState(() {
+        _isDarkMode = prefs.getBool('isDarkMode') ?? false;
+        _themeLoaded = true;
+      });
+    } catch (e) {
+      debugPrint('Theme load error: $e');
+      if (!mounted) return;
+
+      setState(() {
+        _isDarkMode = false;
+        _themeLoaded = true;
+      });
+    }
   }
 
   Future<void> _toggleTheme(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('isDarkMode', value);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('isDarkMode', value);
+    } catch (e) {
+      debugPrint('Theme save error: $e');
+    }
+
+    if (!mounted) return;
     setState(() {
       _isDarkMode = value;
     });
@@ -64,7 +90,6 @@ class _MyAppState extends State<MyApp> {
           seedColor: const Color(0xFF1e3c72),
           brightness: Brightness.light,
         ),
-        fontFamily: 'Segoe UI',
       ),
       darkTheme: ThemeData(
         useMaterial3: true,
@@ -72,9 +97,14 @@ class _MyAppState extends State<MyApp> {
           seedColor: const Color(0xFF1e3c72),
           brightness: Brightness.dark,
         ),
-        fontFamily: 'Segoe UI',
       ),
-      home: SplashScreen(
+      home: !_themeLoaded
+          ? const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      )
+          : SplashScreen(
         child: FamilyTreePage(
           isDarkMode: _isDarkMode,
           onThemeToggle: _toggleTheme,
