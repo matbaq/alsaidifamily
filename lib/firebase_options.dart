@@ -65,4 +65,5 @@ class DefaultFirebaseOptions {
     storageBucket: 'alsaidy-app.firebasestorage.app',
     iosBundleId: 'com.alsaidi.familytree.familytree',
   );
+
 }
