@@ -21,6 +21,7 @@ import '../data/family_repository.dart';
 import '../models/family_member.dart';
 import '../models/tree_node.dart';
 import '../widgets/family_tree/custom_family_tree_view.dart';
+import '../widgets/family_tree/tidy_tree_layout.dart';
 import '../widgets/family_tree/node_widget.dart'; // ⭐ تم إرجاع هذا الاستيراد لحل المشكلة
 import '../utils/relationship_utils.dart';
 import '../services/security_service.dart';
@@ -105,7 +106,7 @@ class _FamilyTreePageState extends State<FamilyTreePage>
   String _indexQuery = '';
 
   AnimationController? _zoomAC;
-  static const double _minScale = 0.06;
+  static const double _minScale = 0.01;
   static const double _maxScale = 3.0;
 
   List<FamilyMember>? _cachedAll;
@@ -119,7 +120,23 @@ class _FamilyTreePageState extends State<FamilyTreePage>
 
   bool get _isAdmin => _auth.currentUser != null;
 
-  static const double _topOffset = 130.0;
+  static const double _baseTopOffset = 130.0;
+
+  double _effectiveTopOffset(BuildContext context) {
+    final safeTop = MediaQuery.of(context).padding.top;
+    final searchExtra = _showSearch ? 58.0 : 0.0;
+    return _baseTopOffset + (safeTop > 24 ? 10.0 : 0.0) + searchExtra;
+  }
+
+  double _searchBarTop(BuildContext context) {
+    return MediaQuery.of(context).padding.top + 54.0;
+  }
+
+  double _memberCountTop(BuildContext context) {
+    final base = MediaQuery.of(context).padding.top + 62.0;
+    if (!_showSearch) return base;
+    return _searchBarTop(context) + 52.0;
+  }
 
   static const String _supportEmail = 'zker2003@gmail.com';
   static const String _supportPhone = '9109999979';
@@ -224,6 +241,14 @@ class _FamilyTreePageState extends State<FamilyTreePage>
     });
   }
 
+  void _resetView() {
+    _treeController.value = Matrix4.identity();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _fitTree();
+    });
+  }
+
   void _fitTree() {
     if (_treeBounds == null) return;
 
@@ -232,8 +257,9 @@ class _FamilyTreePageState extends State<FamilyTreePage>
 
     const pad = 40.0;
     final availableW = screen.width;
+    final topOffset = _effectiveTopOffset(context);
     final availableH =
-    (screen.height - _topOffset).clamp(200.0, screen.height);
+    (screen.height - topOffset).clamp(200.0, screen.height);
 
     final sx = availableW / (b.width + pad * 2);
     final sy = availableH / (b.height + pad * 2);
@@ -255,7 +281,7 @@ class _FamilyTreePageState extends State<FamilyTreePage>
     final ty = (availableH - b.height * scale) / 2 - b.top * scale;
 
     _treeController.value = Matrix4.identity()
-      ..translate(tx, ty + _topOffset)
+      ..translate(tx, ty + topOffset)
       ..scale(scale);
   }
 
@@ -298,7 +324,7 @@ class _FamilyTreePageState extends State<FamilyTreePage>
     final screen = MediaQuery.of(context).size;
     final focal = Offset(
       screen.width / 2,
-      (screen.height + _topOffset) / 2,
+      (screen.height + _effectiveTopOffset(context)) / 2,
     );
 
     final next = Matrix4.identity()
@@ -318,7 +344,7 @@ class _FamilyTreePageState extends State<FamilyTreePage>
     final sc = _treeController.value.getMaxScaleOnAxis();
 
     final tx = screen.width / 2 - center.dx * sc;
-    final ty = (screen.height + _topOffset) / 2 - center.dy * sc;
+    final ty = (screen.height + _effectiveTopOffset(context)) / 2 - center.dy * sc;
 
     final target = Matrix4.identity()..translate(tx, ty)..scale(sc);
 
@@ -1745,11 +1771,14 @@ class _FamilyTreePageState extends State<FamilyTreePage>
                 _setInitialCollapse(all);
                 _recompute(all, access, privacy);
 
+                final safeBottom = MediaQuery.of(context).padding.bottom;
+                final topOffset = _effectiveTopOffset(context);
+
                 return Stack(
                   children: [
                     _buildBackground(isDark),
                     Positioned.fill(
-                      top: _topOffset,
+                      top: topOffset,
                       child: RepaintBoundary(
                         key: _treeShotKey,
                         child: _buildTreeView(isDark, access),
@@ -1758,24 +1787,24 @@ class _FamilyTreePageState extends State<FamilyTreePage>
                     _buildAppBar(isDark),
                     if (_showSearch)
                       Positioned(
-                        top: 90,
+                        top: _searchBarTop(context),
                         left: 16,
                         right: 16,
                         child: _buildSearchBar(isDark),
                       ),
                     Positioned(
-                      top: MediaQuery.of(context).padding.top + 62,
+                      top: _memberCountTop(context),
                       left: 16,
                       child: _buildMemberCount(all, access, privacy),
                     ),
                     if (_isAdmin)
                       Positioned(
-                        bottom: 24,
+                        bottom: safeBottom + 16,
                         right: 16,
                         child: _buildFAB(all),
                       ),
                     Positioned(
-                      bottom: 24,
+                      bottom: safeBottom + 16,
                       left: 16,
                       child: Column(
                         children: [
@@ -1784,6 +1813,18 @@ class _FamilyTreePageState extends State<FamilyTreePage>
                           _zoomBtn(
                             Icons.remove_rounded,
                                 () => _zoomBy(1 / 1.18),
+                            isDark,
+                          ),
+                          const SizedBox(height: 10),
+                          _zoomBtn(
+                            Icons.fit_screen_rounded,
+                                _fitTree,
+                            isDark,
+                          ),
+                          const SizedBox(height: 10),
+                          _zoomBtn(
+                            Icons.center_focus_strong_rounded,
+                                _resetView,
                             isDark,
                           ),
                         ],
@@ -2160,6 +2201,7 @@ class _FamilyTreePageState extends State<FamilyTreePage>
       selectedNodeId: _selectedId,
       externalController: _treeController,
       onToggleChildren: _toggleCollapse,
+      direction: TreeVerticalDirection.bottomToTop,
       onLayoutReady: (centers, bounds, canvasSize) {
         _nodeCenters = centers;
         _treeBounds = bounds;

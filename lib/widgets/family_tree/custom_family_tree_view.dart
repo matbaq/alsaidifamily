@@ -5,9 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math_64.dart' hide Colors;
 
 import '../../models/tree_node.dart';
-import 'tidy_tree_layout.dart';
 import 'family_tree_painter.dart';
 import 'node_widget.dart';
+import 'tidy_tree_layout.dart';
 
 class CustomFamilyTreeView extends StatefulWidget {
   final List<TreeNode> roots;
@@ -16,6 +16,7 @@ class CustomFamilyTreeView extends StatefulWidget {
   final TransformationController? externalController;
   final void Function(Map<String, Offset> centers, Rect bounds, Size canvasSize)? onLayoutReady;
   final void Function(String nodeId)? onToggleChildren;
+  final TreeVerticalDirection direction;
 
   const CustomFamilyTreeView({
     super.key,
@@ -25,6 +26,7 @@ class CustomFamilyTreeView extends StatefulWidget {
     this.externalController,
     this.onLayoutReady,
     this.onToggleChildren,
+    this.direction = TreeVerticalDirection.bottomToTop,
   });
 
   @override
@@ -42,8 +44,8 @@ class _CustomFamilyTreeViewState extends State<CustomFamilyTreeView> {
 
   static const double nodeWidth = 120.0;
   static const double nodeHeight = 140.0;
-  static const double minScale = 0.01;
-  static const double maxScale = 5.0;
+  static const double minScale = 0.004;
+  static const double maxScale = 6.0;
 
   final Set<String> _visibleIds = {};
   final Map<String, int> _levelMap = {};
@@ -78,6 +80,13 @@ class _CustomFamilyTreeViewState extends State<CustomFamilyTreeView> {
     }
 
     _rebuild();
+
+    if (widget.selectedNodeId != null && old.selectedNodeId != widget.selectedNodeId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _focusSelected();
+      });
+    }
   }
 
   @override
@@ -89,8 +98,7 @@ class _CustomFamilyTreeViewState extends State<CustomFamilyTreeView> {
   }
 
   void _onTransformChanged() {
-    if (_positions.isEmpty) return;
-    if (_isInteracting) return;
+    if (_positions.isEmpty || _isInteracting) return;
 
     _visibleDebounce?.cancel();
     _visibleDebounce = Timer(const Duration(milliseconds: 70), () {
@@ -104,21 +112,30 @@ class _CustomFamilyTreeViewState extends State<CustomFamilyTreeView> {
       h = 37 * h + n.id.hashCode;
       h = 37 * h + n.children.length;
       h = 37 * h + (n.isCollapsed ? 1 : 0);
-      for (final c in n.children) visit(c);
+      for (final c in n.children) {
+        visit(c);
+      }
     }
 
-    for (final r in roots) visit(r);
+    for (final r in roots) {
+      visit(r);
+    }
     return h;
   }
 
   void _buildLevelMap(List<TreeNode> roots) {
     _levelMap.clear();
+
     void visit(TreeNode n, int level) {
       _levelMap[n.id] = level;
-      for (final c in n.children) visit(c, level + 1);
+      for (final c in n.children) {
+        visit(c, level + 1);
+      }
     }
 
-    for (final r in roots) visit(r, 0);
+    for (final r in roots) {
+      visit(r, 0);
+    }
   }
 
   void _rebuild({bool force = false}) {
@@ -145,48 +162,16 @@ class _CustomFamilyTreeViewState extends State<CustomFamilyTreeView> {
 
     _buildLevelMap(widget.roots);
 
-    final result = TidyTreeLayout.layout(widget.roots);
-    final canvasH = result.canvasSize.height;
-    const pad = 60.0;
-
-    final flipped = result.positions
-        .map((p) => NodePosition(
-      node: p.node,
-      x: p.x,
-      y: canvasH - p.y - nodeHeight,
-      level: p.level,
-    ))
-        .toList();
-
-    double minX = double.infinity, minY = double.infinity;
-    double maxX = -double.infinity, maxY = -double.infinity;
-
-    for (final p in flipped) {
-      if (p.x < minX) minX = p.x;
-      if (p.y < minY) minY = p.y;
-      if (p.x + nodeWidth > maxX) maxX = p.x + nodeWidth;
-      if (p.y + nodeHeight > maxY) maxY = p.y + nodeHeight;
-    }
-
-    final shiftX = -minX + pad;
-    final shiftY = -minY + pad;
-
-    final normalized = flipped
-        .map((p) => NodePosition(
-      node: p.node,
-      x: p.x + shiftX,
-      y: p.y + shiftY,
-      level: p.level,
-    ))
-        .toList();
-
-    final newSize = Size((maxX - minX) + pad * 2, (maxY - minY) + pad * 2);
+    final result = TidyTreeLayout.layout(
+      widget.roots,
+      config: TreeLayoutConfig(direction: widget.direction),
+    );
 
     if (!_usingExternalController) _didInitialZoom = false;
 
     setState(() {
-      _positions = normalized;
-      _treeSize = newSize;
+      _positions = result.positions;
+      _treeSize = result.canvasSize;
       _lastFingerprint = fp;
     });
 
@@ -195,7 +180,34 @@ class _CustomFamilyTreeViewState extends State<CustomFamilyTreeView> {
       _emitCenters();
       _setInitialZoom();
       _updateVisible(force: true);
+      _focusSelected();
     });
+  }
+
+  void _focusSelected() {
+    final selectedId = widget.selectedNodeId;
+    if (selectedId == null) return;
+    final center = _nodeCenter(selectedId);
+    if (center == null) return;
+
+    final size = MediaQuery.of(context).size;
+    final currentScale = _controller.value.getMaxScaleOnAxis().clamp(minScale, maxScale);
+
+    final tx = size.width / 2 - center.dx * currentScale;
+    final ty = size.height / 2 - center.dy * currentScale;
+
+    _controller.value = Matrix4.identity()
+      ..translate(tx, ty)
+      ..scale(currentScale);
+  }
+
+  Offset? _nodeCenter(String id) {
+    for (final p in _positions) {
+      if (p.node.id == id) {
+        return Offset(p.x + nodeWidth / 2, p.y + nodeHeight / 2);
+      }
+    }
+    return null;
   }
 
   void _emitCenters() {
@@ -213,36 +225,39 @@ class _CustomFamilyTreeViewState extends State<CustomFamilyTreeView> {
   Rect _computeBounds() {
     if (_positions.isEmpty) return Rect.zero;
 
-    double minX = double.infinity, minY = double.infinity;
-    double maxX = -double.infinity, maxY = -double.infinity;
+    double minX = double.infinity;
+    double minY = double.infinity;
+    double maxX = -double.infinity;
+    double maxY = -double.infinity;
 
     for (final p in _positions) {
-      if (p.x < minX) minX = p.x;
-      if (p.y < minY) minY = p.y;
-      if (p.x + nodeWidth > maxX) maxX = p.x + nodeWidth;
-      if (p.y + nodeHeight > maxY) maxY = p.y + nodeHeight;
+      minX = math.min(minX, p.x);
+      minY = math.min(minY, p.y);
+      maxX = math.max(maxX, p.x + nodeWidth);
+      maxY = math.max(maxY, p.y + nodeHeight);
     }
 
     return Rect.fromLTRB(minX, minY, maxX, maxY);
   }
 
   void _setInitialZoom() {
-    if (_usingExternalController) return;
-    if (_didInitialZoom) return;
+    if (_usingExternalController || _didInitialZoom) return;
 
     _didInitialZoom = true;
 
     final screen = MediaQuery.of(context).size;
-    const margin = 48.0;
+    const margin = 32.0;
 
     final sx = (screen.width - margin * 2) / _treeSize.width;
     final sy = (screen.height - margin * 2) / _treeSize.height;
 
-    final scale = math.min(sx, sy).clamp(minScale, 1.5);
+    final scale = math.min(sx, sy).clamp(minScale, 1.35);
     final tx = (screen.width - _treeSize.width * scale) / 2;
     final ty = (screen.height - _treeSize.height * scale) / 2;
 
-    _controller.value = Matrix4.identity()..translate(tx, ty)..scale(scale);
+    _controller.value = Matrix4.identity()
+      ..translate(tx, ty)
+      ..scale(scale);
   }
 
   void _updateVisible({bool force = false}) {
@@ -263,11 +278,9 @@ class _CustomFamilyTreeViewState extends State<CustomFamilyTreeView> {
       return Offset(v.x, v.y);
     }
 
-    final vs = box.size;
     final tl = toScene(Offset.zero);
-    final br = toScene(Offset(vs.width, vs.height));
-
-    final rect = Rect.fromPoints(tl, br).inflate(400);
+    final br = toScene(Offset(box.size.width, box.size.height));
+    final rect = Rect.fromPoints(tl, br).inflate(500);
 
     final newIds = <String>{};
     for (final p in _positions) {
@@ -277,7 +290,9 @@ class _CustomFamilyTreeViewState extends State<CustomFamilyTreeView> {
     }
 
     if (newIds.isEmpty) {
-      for (final p in _positions) newIds.add(p.node.id);
+      for (final p in _positions) {
+        newIds.add(p.node.id);
+      }
     }
 
     if (!force &&
@@ -310,24 +325,21 @@ class _CustomFamilyTreeViewState extends State<CustomFamilyTreeView> {
 
     return InteractiveViewer(
       transformationController: _controller,
-      boundaryMargin: const EdgeInsets.all(800),
+      boundaryMargin: const EdgeInsets.all(1200),
       minScale: minScale,
       maxScale: maxScale,
       constrained: false,
-
-      onInteractionStart: (_) {
-        _isInteracting = true;
-      },
+      panEnabled: true,
+      scaleEnabled: true,
+      onInteractionStart: (_) => _isInteracting = true,
       onInteractionEnd: (_) {
         _isInteracting = false;
         _updateVisible(force: true);
       },
-
       child: SizedBox(
         width: _treeSize.width,
         height: _treeSize.height,
         child: CustomPaint(
-          // ⭐ تم تمرير visibleIds هنا بنجاح
           painter: FamilyTreePainter(
             positions: _positions,
             visibleIds: _visibleIds,
@@ -336,7 +348,10 @@ class _CustomFamilyTreeViewState extends State<CustomFamilyTreeView> {
           child: Stack(
             children: visiblePos.map((pos) {
               final level = _levelMap[pos.node.id] ?? pos.level;
-              return Positioned(
+              return AnimatedPositioned(
+                key: ValueKey('node-${pos.node.id}'),
+                duration: const Duration(milliseconds: 260),
+                curve: Curves.easeOutCubic,
                 left: pos.x,
                 top: pos.y,
                 child: NodeWidget(

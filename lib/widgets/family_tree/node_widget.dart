@@ -121,7 +121,7 @@ class NodeWidget extends StatelessWidget {
               width: 120,
               height: 140,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(22),
+                borderRadius: BorderRadius.circular(20),
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -216,7 +216,7 @@ class NodeWidget extends StatelessWidget {
                       _buildAvatar(primary, accent, isDark, isRoot),
                       const SizedBox(height: 8),
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
                         child: Text(
                           node.name,
                           style: TextStyle(
@@ -226,6 +226,7 @@ class NodeWidget extends StatelessWidget {
                             height: 1.25,
                           ),
                           textAlign: TextAlign.center,
+                          textDirection: TextDirection.rtl,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
