@@ -34,10 +34,10 @@ class TreeLayoutConfig {
   const TreeLayoutConfig({
     this.nodeWidth = 120,
     this.nodeHeight = 140,
-    this.siblingGap = 22,
-    this.rootGap = 52,
-    this.levelGap = 92,
-    this.padding = 72,
+    this.siblingGap = 20,
+    this.rootGap = 36,
+    this.levelGap = 72,
+    this.padding = 24,
     this.direction = TreeVerticalDirection.bottomToTop,
   });
 }
@@ -96,31 +96,38 @@ class TidyTreeLayout {
 
     final positions = <NodePosition>[];
 
-    void place(TreeNode node, double leftX, int level) {
-      final width = subtreeWidth[node.id] ?? config.nodeWidth;
-      final nodeX = leftX + (width - config.nodeWidth) / 2;
-      final nodeY = config.padding + level * (config.nodeHeight + config.levelGap);
+    void place(TreeNode node, double centerX, int level) {
+      final nodeX = centerX - config.nodeWidth / 2;
+      final nodeY = level * (config.nodeHeight + config.levelGap);
 
-      positions.add(
-        NodePosition(node: node, x: nodeX, y: nodeY, level: level),
-      );
+      positions.add(NodePosition(node: node, x: nodeX, y: nodeY, level: level));
 
       if (node.isCollapsed || node.children.isEmpty) return;
 
       final kids = orderedChildren[node.id] ?? const <TreeNode>[];
-      double childLeft = leftX;
+      double childrenBand = 0;
+      for (int i = 0; i < kids.length; i++) {
+        childrenBand += subtreeWidth[kids[i].id] ?? config.nodeWidth;
+        if (i != kids.length - 1) childrenBand += config.siblingGap;
+      }
+
+      double childLeft = centerX - childrenBand / 2;
       for (int i = 0; i < kids.length; i++) {
         final c = kids[i];
-        place(c, childLeft, level + 1);
-        childLeft += (subtreeWidth[c.id] ?? config.nodeWidth) + config.siblingGap;
+        final cWidth = subtreeWidth[c.id] ?? config.nodeWidth;
+        final childCenterX = childLeft + cWidth / 2;
+        place(c, childCenterX, level + 1);
+        childLeft += cWidth + config.siblingGap;
       }
     }
 
-    double rootsLeft = config.padding;
+    double forestLeft = 0;
     for (int i = 0; i < roots.length; i++) {
       final root = roots[i];
-      place(root, rootsLeft, 0);
-      rootsLeft += (subtreeWidth[root.id] ?? config.nodeWidth) + config.rootGap;
+      final rootWidth = subtreeWidth[root.id] ?? config.nodeWidth;
+      final rootCenterX = forestLeft + rootWidth / 2;
+      place(root, rootCenterX, 0);
+      forestLeft += rootWidth + config.rootGap;
     }
 
     double minX = double.infinity;
