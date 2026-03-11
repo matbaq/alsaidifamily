@@ -47,17 +47,48 @@ class FamilyTreePainter extends CustomPainter {
         final childBotY = childPos.y + nodeHeight - toggleBtnOffset;
 
         final midY = (parentTopY + childBotY) / 2;
+        const maxCornerRadius = 16.0;
 
-        // مسار أنظف: عمودي ثم أفقي ثم عمودي
-        final path = Path()
-          ..moveTo(parentCX, parentTopY)
-          ..lineTo(parentCX, midY)
-          ..quadraticBezierTo(
-            parentCX,
-            childBotY,
-            childCX,
-            childBotY,
-          );
+        final dy1 = midY - parentTopY;
+        final dy2 = childBotY - midY;
+        final dx = childCX - parentCX;
+
+        final cornerRadius = [
+          maxCornerRadius,
+          dx.abs() / 2,
+          dy1.abs(),
+          dy2.abs(),
+        ].reduce((a, b) => a < b ? a : b);
+
+        final path = Path()..moveTo(parentCX, parentTopY);
+
+        if (cornerRadius <= 0.01 || dx.abs() <= 0.01) {
+          path
+            ..lineTo(parentCX, midY)
+            ..lineTo(childCX, midY)
+            ..lineTo(childCX, childBotY);
+        } else {
+          final xDir = dx.isNegative ? -1.0 : 1.0;
+          final y1Dir = dy1.isNegative ? -1.0 : 1.0;
+          final y2Dir = dy2.isNegative ? -1.0 : 1.0;
+
+          path
+            ..lineTo(parentCX, midY - y1Dir * cornerRadius)
+            ..quadraticBezierTo(
+              parentCX,
+              midY,
+              parentCX + xDir * cornerRadius,
+              midY,
+            )
+            ..lineTo(childCX - xDir * cornerRadius, midY)
+            ..quadraticBezierTo(
+              childCX,
+              midY,
+              childCX,
+              midY + y2Dir * cornerRadius,
+            )
+            ..lineTo(childCX, childBotY);
+        }
 
         final rect = Rect.fromLTRB(
           parentCX < childCX ? parentCX : childCX,
