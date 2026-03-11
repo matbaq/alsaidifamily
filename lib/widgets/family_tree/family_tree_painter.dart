@@ -10,6 +10,7 @@ class FamilyTreePainter extends CustomPainter {
   static const double nodeWidth = 120.0;
   static const double nodeHeight = 140.0;
   static const double toggleBtnOffset = 14.0;
+  static const double _minLinkDistanceSquared = 0.5;
 
   FamilyTreePainter({
     required this.positions,
@@ -52,7 +53,7 @@ class FamilyTreePainter extends CustomPainter {
           parentAboveChild ? childPos.y : childPos.y + nodeHeight - toggleBtnOffset,
         );
 
-        if ((from - to).distanceSquared < 0.5) continue;
+        if ((from - to).distanceSquared < _minLinkDistanceSquared) continue;
 
         final midY = (from.dy + to.dy) / 2;
         final dx = to.dx - from.dx;
