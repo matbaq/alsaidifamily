@@ -106,8 +106,8 @@ class _FamilyTreePageState extends State<FamilyTreePage>
   String _indexQuery = '';
 
   AnimationController? _zoomAC;
-  static const double _minScale = 0.01;
-  static const double _maxScale = 3.0;
+  static const double _minScale = 0.001;
+  static const double _maxScale = 4.0;
 
   List<FamilyMember>? _cachedAll;
   String _cachedQuery = '';
@@ -264,18 +264,7 @@ class _FamilyTreePageState extends State<FamilyTreePage>
     final sx = availableW / (b.width + pad * 2);
     final sy = availableH / (b.height + pad * 2);
 
-    double minReadableScale;
-    final totalMembers = _cachedAll?.length ?? 0;
-
-    if (totalMembers >= 800) {
-      minReadableScale = 0.16;
-    } else if (totalMembers >= 400) {
-      minReadableScale = 0.13;
-    } else {
-      minReadableScale = 0.10;
-    }
-
-    final scale = (sx < sy ? sx : sy).clamp(minReadableScale, 2.2);
+    final scale = (sx < sy ? sx : sy).clamp(_minScale, 2.4);
 
     final tx = (availableW - b.width * scale) / 2 - b.left * scale;
     final ty = (availableH - b.height * scale) / 2 - b.top * scale;
@@ -1808,24 +1797,32 @@ class _FamilyTreePageState extends State<FamilyTreePage>
                       left: 16,
                       child: Column(
                         children: [
-                          _zoomBtn(Icons.add_rounded, () => _zoomBy(1.18), isDark),
+                          _zoomBtn(
+                            Icons.add_rounded,
+                            () => _zoomBy(1.18),
+                            isDark,
+                            tooltip: 'تكبير',
+                          ),
                           const SizedBox(height: 10),
                           _zoomBtn(
                             Icons.remove_rounded,
-                                () => _zoomBy(1 / 1.18),
+                            () => _zoomBy(1 / 1.18),
                             isDark,
+                            tooltip: 'تصغير',
                           ),
                           const SizedBox(height: 10),
                           _zoomBtn(
                             Icons.fit_screen_rounded,
-                                _fitTree,
+                            _fitTree,
                             isDark,
+                            tooltip: 'ملاءمة الشاشة',
                           ),
                           const SizedBox(height: 10),
                           _zoomBtn(
                             Icons.center_focus_strong_rounded,
-                                _resetView,
+                            _resetView,
                             isDark,
+                            tooltip: 'إعادة الضبط',
                           ),
                         ],
                       ),
@@ -2328,34 +2325,42 @@ class _FamilyTreePageState extends State<FamilyTreePage>
     );
   }
 
-  Widget _zoomBtn(IconData icon, VoidCallback onTap, bool isDark) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 42,
-        height: 42,
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.surface : Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: isDark ? AppColors.border : Colors.grey.shade200,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.12),
-              blurRadius: 14,
+  Widget _zoomBtn(
+    IconData icon,
+    VoidCallback onTap,
+    bool isDark, {
+    String? tooltip,
+  }) {
+    return Tooltip(
+      message: tooltip ?? '',
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.surface : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isDark ? AppColors.border : Colors.grey.shade200,
             ),
-          ],
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 14,
+              ),
+            ],
+          ),
+          child: Icon(icon, color: AppColors.gold, size: 22),
         ),
-        child: Icon(icon, color: AppColors.gold, size: 22),
       ),
     );
   }
 
   Widget _buildFamilyIndexDrawer(
-      AccessController access,
-      PrivacySettings privacy,
-      ) {
+    AccessController access,
+    PrivacySettings privacy,
+  ) {
     final isDark = widget.isDarkMode;
 
     Widget tabBtn({
