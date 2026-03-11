@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'tidy_tree_layout.dart';
 
 class FamilyTreePainter extends CustomPainter {
@@ -9,6 +10,7 @@ class FamilyTreePainter extends CustomPainter {
   static const double nodeWidth = 120.0;
   static const double nodeHeight = 140.0;
   static const double toggleBtnOffset = 14.0;
+  static const double _minLinkDistanceSquared = 0.5;
 
   FamilyTreePainter({
     required this.positions,
@@ -20,18 +22,16 @@ class FamilyTreePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (positions.isEmpty) return;
 
-    final posById = <String, NodePosition>{};
-    for (final p in positions) {
-      posById[p.node.id] = p;
-    }
+    final posById = <String, NodePosition>{
+      for (final p in positions) p.node.id: p,
+    };
 
     for (final p in positions) {
       if (!visibleIds.contains(p.node.id)) continue;
 
       for (final child in p.node.children) {
         final childPos = posById[child.id];
-        if (childPos == null) continue;
-        if (!visibleIds.contains(child.id)) continue;
+        if (childPos == null || !visibleIds.contains(child.id)) continue;
 
         final isHighlighted = selectedNodeId != null &&
             (p.node.id == selectedNodeId || child.id == selectedNodeId);
@@ -39,20 +39,37 @@ class FamilyTreePainter extends CustomPainter {
         final parentColor = p.node.branchColor;
         final childColor = child.branchColor;
 
-        final parentCX = p.x + nodeWidth / 2;
-        final childCX = childPos.x + nodeWidth / 2;
+        final parentCenter = Offset(
+          p.x + nodeWidth / 2,
+          p.y + nodeHeight / 2,
+        );
+        final childCenter = Offset(
+          childPos.x + nodeWidth / 2,
+          childPos.y + nodeHeight / 2,
+        );
 
-        // الجد أسفل - الأبناء فوق
-        final parentTopY = p.y;
-        final childBotY = childPos.y + nodeHeight - toggleBtnOffset;
+        final parentAboveChild = parentCenter.dy < childCenter.dy;
 
-        final midY = (parentTopY + childBotY) / 2;
-        const maxCornerRadius = 16.0;
+        final from = Offset(
+          parentCenter.dx,
+          parentAboveChild ? p.y + nodeHeight - toggleBtnOffset : p.y,
+        );
 
-        final dy1 = midY - parentTopY;
-        final dy2 = childBotY - midY;
-        final dx = childCX - parentCX;
+        final to = Offset(
+          childCenter.dx,
+          parentAboveChild
+              ? childPos.y
+              : childPos.y + nodeHeight - toggleBtnOffset,
+        );
 
+        if ((from - to).distanceSquared < _minLinkDistanceSquared) continue;
+
+        final midY = (from.dy + to.dy) / 2;
+        final dx = to.dx - from.dx;
+        final dy1 = midY - from.dy;
+        final dy2 = to.dy - midY;
+
+        const maxCornerRadius = 15.0;
         final cornerRadius = [
           maxCornerRadius,
           dx.abs() / 2,
@@ -60,79 +77,79 @@ class FamilyTreePainter extends CustomPainter {
           dy2.abs(),
         ].reduce((a, b) => a < b ? a : b);
 
-        final path = Path()..moveTo(parentCX, parentTopY);
+        final path = Path()..moveTo(from.dx, from.dy);
 
         if (cornerRadius <= 0.01 || dx.abs() <= 0.01) {
           path
-            ..lineTo(parentCX, midY)
-            ..lineTo(childCX, midY)
-            ..lineTo(childCX, childBotY);
+            ..lineTo(from.dx, midY)
+            ..lineTo(to.dx, midY)
+            ..lineTo(to.dx, to.dy);
         } else {
           final xDir = dx.isNegative ? -1.0 : 1.0;
           final y1Dir = dy1.isNegative ? -1.0 : 1.0;
           final y2Dir = dy2.isNegative ? -1.0 : 1.0;
 
           path
-            ..lineTo(parentCX, midY - y1Dir * cornerRadius)
+            ..lineTo(from.dx, midY - y1Dir * cornerRadius)
             ..quadraticBezierTo(
-              parentCX,
+              from.dx,
               midY,
-              parentCX + xDir * cornerRadius,
+              from.dx + xDir * cornerRadius,
               midY,
             )
-            ..lineTo(childCX - xDir * cornerRadius, midY)
+            ..lineTo(to.dx - xDir * cornerRadius, midY)
             ..quadraticBezierTo(
-              childCX,
+              to.dx,
               midY,
-              childCX,
+              to.dx,
               midY + y2Dir * cornerRadius,
             )
-            ..lineTo(childCX, childBotY);
+            ..lineTo(to.dx, to.dy);
         }
 
-        final rect = Rect.fromLTRB(
-          parentCX < childCX ? parentCX : childCX,
-          childBotY < parentTopY ? childBotY : parentTopY,
-          parentCX > childCX ? parentCX : childCX,
-          childBotY > parentTopY ? childBotY : parentTopY,
-        );
-
+        final rect = Rect.fromPoints(from, to);
         final safeRect = rect.width < 1 || rect.height < 1
             ? Rect.fromCenter(
-          center: rect.center,
-          width: 2,
-          height: rect.height.clamp(2, 9999),
-        )
+                center: rect.center,
+                width: rect.width.clamp(2, 9999),
+                height: rect.height.clamp(2, 9999),
+              )
             : rect;
 
-        final shader = LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [
-            parentColor.withValues(alpha: isHighlighted ? 0.95 : 0.65),
-            childColor.withValues(alpha: isHighlighted ? 0.85 : 0.35),
-          ],
-        ).createShader(safeRect);
-
-        final paint = Paint()
-          ..shader = shader
-          ..strokeWidth = isHighlighted ? 3.2 : 2.0
+        final glowPaint = Paint()
+          ..color = parentColor.withValues(alpha: isHighlighted ? 0.18 : 0.10)
+          ..strokeWidth = isHighlighted ? 7.0 : 5.0
           ..style = PaintingStyle.stroke
           ..strokeCap = StrokeCap.round
           ..strokeJoin = StrokeJoin.round;
 
-        canvas.drawPath(path, paint);
+        final linePaint = Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.bottomCenter,
+            end: Alignment.topCenter,
+            colors: [
+              parentColor.withValues(alpha: isHighlighted ? 0.96 : 0.72),
+              childColor.withValues(alpha: isHighlighted ? 0.92 : 0.46),
+            ],
+          ).createShader(safeRect)
+          ..strokeWidth = isHighlighted ? 3.0 : 2.2
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round;
+
+        canvas.drawPath(path, glowPaint);
+        canvas.drawPath(path, linePaint);
 
         if (isHighlighted) {
           canvas.drawCircle(
-            Offset(parentCX, parentTopY),
-            4.5,
-            Paint()..color = parentColor.withValues(alpha: 0.9),
+            from,
+            4.2,
+            Paint()..color = parentColor.withValues(alpha: 0.95),
           );
           canvas.drawCircle(
-            Offset(childCX, childBotY),
-            4.5,
-            Paint()..color = childColor.withValues(alpha: 0.9),
+            to,
+            4.2,
+            Paint()..color = childColor.withValues(alpha: 0.95),
           );
         }
       }

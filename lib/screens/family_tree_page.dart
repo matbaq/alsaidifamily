@@ -21,6 +21,7 @@ import '../data/family_repository.dart';
 import '../models/family_member.dart';
 import '../models/tree_node.dart';
 import '../widgets/family_tree/custom_family_tree_view.dart';
+import '../widgets/family_tree/tidy_tree_layout.dart';
 import '../widgets/family_tree/node_widget.dart'; // ⭐ تم إرجاع هذا الاستيراد لحل المشكلة
 import '../utils/relationship_utils.dart';
 import '../services/security_service.dart';
@@ -105,7 +106,7 @@ class _FamilyTreePageState extends State<FamilyTreePage>
   String _indexQuery = '';
 
   AnimationController? _zoomAC;
-  static const double _minScale = 0.06;
+  static const double _minScale = 0.01;
   static const double _maxScale = 3.0;
 
   List<FamilyMember>? _cachedAll;
@@ -237,6 +238,14 @@ class _FamilyTreePageState extends State<FamilyTreePage>
       _collapsedIds
         ..clear()
         ..addAll(idsWithChildren);
+    });
+  }
+
+  void _resetView() {
+    _treeController.value = Matrix4.identity();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _fitTree();
     });
   }
 
@@ -1806,6 +1815,18 @@ class _FamilyTreePageState extends State<FamilyTreePage>
                                 () => _zoomBy(1 / 1.18),
                             isDark,
                           ),
+                          const SizedBox(height: 10),
+                          _zoomBtn(
+                            Icons.fit_screen_rounded,
+                                _fitTree,
+                            isDark,
+                          ),
+                          const SizedBox(height: 10),
+                          _zoomBtn(
+                            Icons.center_focus_strong_rounded,
+                                _resetView,
+                            isDark,
+                          ),
                         ],
                       ),
                     ),
@@ -2180,6 +2201,7 @@ class _FamilyTreePageState extends State<FamilyTreePage>
       selectedNodeId: _selectedId,
       externalController: _treeController,
       onToggleChildren: _toggleCollapse,
+      direction: TreeVerticalDirection.bottomToTop,
       onLayoutReady: (centers, bounds, canvasSize) {
         _nodeCenters = centers;
         _treeBounds = bounds;
