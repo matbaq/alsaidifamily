@@ -26,7 +26,7 @@ class CustomFamilyTreeView extends StatefulWidget {
     this.externalController,
     this.onLayoutReady,
     this.onToggleChildren,
-    this.direction = TreeVerticalDirection.bottomToTop,
+    this.direction = TreeVerticalDirection.topToBottom,
   });
 
   @override
@@ -44,7 +44,7 @@ class _CustomFamilyTreeViewState extends State<CustomFamilyTreeView> {
 
   static const double nodeWidth = 120.0;
   static const double nodeHeight = 140.0;
-  static const double minScale = 0.004;
+  static const double minScale = 0.001;
   static const double maxScale = 6.0;
 
   final Set<String> _visibleIds = {};
@@ -164,7 +164,13 @@ class _CustomFamilyTreeViewState extends State<CustomFamilyTreeView> {
 
     final result = TidyTreeLayout.layout(
       widget.roots,
-      config: TreeLayoutConfig(direction: widget.direction),
+      config: TreeLayoutConfig(
+        direction: widget.direction,
+        padding: 16,
+        levelGap: 68,
+        siblingGap: 20,
+        rootGap: 28,
+      ),
     );
 
     if (!_usingExternalController) _didInitialZoom = false;
@@ -325,10 +331,11 @@ class _CustomFamilyTreeViewState extends State<CustomFamilyTreeView> {
 
     return InteractiveViewer(
       transformationController: _controller,
-      boundaryMargin: const EdgeInsets.all(1200),
+      boundaryMargin: const EdgeInsets.all(40),
       minScale: minScale,
       maxScale: maxScale,
       constrained: false,
+      clipBehavior: Clip.none,
       panEnabled: true,
       scaleEnabled: true,
       onInteractionStart: (_) => _isInteracting = true,
