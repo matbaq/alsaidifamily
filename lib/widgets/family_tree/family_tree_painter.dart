@@ -52,6 +52,8 @@ class FamilyTreePainter extends CustomPainter {
           parentAboveChild ? childPos.y : childPos.y + nodeHeight - toggleBtnOffset,
         );
 
+        if ((from - to).distanceSquared < 0.5) continue;
+
         final midY = (from.dy + to.dy) / 2;
         final dx = to.dx - from.dx;
         final dy1 = midY - from.dy;
