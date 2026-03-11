@@ -39,8 +39,14 @@ class FamilyTreePainter extends CustomPainter {
         final parentColor = p.node.branchColor;
         final childColor = child.branchColor;
 
-        final parentCenter = Offset(p.x + nodeWidth / 2, p.y + nodeHeight / 2);
-        final childCenter = Offset(childPos.x + nodeWidth / 2, childPos.y + nodeHeight / 2);
+        final parentCenter = Offset(
+          p.x + nodeWidth / 2,
+          p.y + nodeHeight / 2,
+        );
+        final childCenter = Offset(
+          childPos.x + nodeWidth / 2,
+          childPos.y + nodeHeight / 2,
+        );
 
         final parentAboveChild = parentCenter.dy < childCenter.dy;
 
@@ -48,9 +54,12 @@ class FamilyTreePainter extends CustomPainter {
           parentCenter.dx,
           parentAboveChild ? p.y + nodeHeight - toggleBtnOffset : p.y,
         );
+
         final to = Offset(
           childCenter.dx,
-          parentAboveChild ? childPos.y : childPos.y + nodeHeight - toggleBtnOffset,
+          parentAboveChild
+              ? childPos.y
+              : childPos.y + nodeHeight - toggleBtnOffset,
         );
 
         if ((from - to).distanceSquared < _minLinkDistanceSquared) continue;
