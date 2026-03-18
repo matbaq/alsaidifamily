@@ -23,9 +23,8 @@ class FamilyUnitConnector extends StatelessWidget {
         : (brightness == Brightness.dark
             ? const Color(0xFF9AA7BC)
             : const Color(0xFF69778E));
-    final background = brightness == Brightness.dark
-        ? const Color(0xFF161C26)
-        : Colors.white;
+    final background =
+        brightness == Brightness.dark ? const Color(0xFF161C26) : Colors.white;
 
     return Material(
       color: Colors.transparent,
@@ -34,50 +33,51 @@ class FamilyUnitConnector extends StatelessWidget {
         onTap: onTap,
         child: Container(
           decoration: BoxDecoration(
-          color: background,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: foreground.withValues(alpha: isHighlighted ? 0.95 : 0.6),
-            width: isHighlighted ? 1.8 : 1.2,
-          ),
-          boxShadow: <BoxShadow>[
-            BoxShadow(
-              color: foreground.withValues(alpha: isHighlighted ? 0.22 : 0.08),
-              blurRadius: isHighlighted ? 18 : 10,
-              offset: const Offset(0, 4),
+            color: background,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: foreground.withValues(alpha: isHighlighted ? 0.95 : 0.6),
+              width: isHighlighted ? 1.8 : 1.2,
             ),
-          ],
-        ),
-        child: Center(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Icon(
-                isCollapsed ? Icons.add_rounded : Icons.remove_rounded,
-                size: 16,
-                color: foreground,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                childCount.toString(),
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: foreground,
-                      fontWeight: FontWeight.w800,
-                    ),
-              ),
-              const SizedBox(width: 4),
-              Container(
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: foreground,
-                ),
+            boxShadow: <BoxShadow>[
+              BoxShadow(
+                color: foreground.withValues(alpha: isHighlighted ? 0.22 : 0.08),
+                blurRadius: isHighlighted ? 18 : 10,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Icon(
+                  isCollapsed ? Icons.add_rounded : Icons.remove_rounded,
+                  size: 16,
+                  color: foreground,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  childCount.toString(),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: foreground,
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                const SizedBox(width: 4),
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: foreground,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
-    ));
+    );
   }
 }

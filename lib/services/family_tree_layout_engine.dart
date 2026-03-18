@@ -25,8 +25,7 @@ class FamilyTreeLayoutConfig {
   final double generationGap;
   final EdgeInsets canvasPadding;
 
-  double get coupleWidth =>
-      (personNodeSize.width * 2) + spouseGap;
+  double get coupleWidth => (personNodeSize.width * 2) + spouseGap;
 
   double get childStep => personNodeSize.width + siblingGap;
 
@@ -70,18 +69,35 @@ class FamilyTreeLayoutEngine {
       );
     }
 
-    final personGenerations = _computePersonGenerations(graph, request.focusPersonId);
-    final familyGenerations = _computeFamilyGenerations(graph, personGenerations);
+    final personGenerations =
+        _computePersonGenerations(graph, request.focusPersonId);
+    final familyGenerations =
+        _computeFamilyGenerations(graph, personGenerations);
 
-    final personX = _initialPersonSlots(graph, personGenerations, request.focusPersonId, config);
+    final personX = _initialPersonSlots(
+      graph,
+      personGenerations,
+      request.focusPersonId,
+      config,
+    );
 
     for (var pass = 0; pass < 3; pass++) {
       _alignFamiliesToPeople(graph, familyGenerations, personX, config);
-      _alignChildrenToFamilies(graph, familyGenerations, personGenerations, personX, config);
+      _alignChildrenToFamilies(
+        graph,
+        familyGenerations,
+        personGenerations,
+        personX,
+        config,
+      );
       _resolveGenerationCollisions(graph, personGenerations, personX, config);
     }
 
-    final familyX = _familyCentersFromPeople(graph, familyGenerations, personX);
+    final familyX = _familyCentersFromPeople(
+      graph,
+      familyGenerations,
+      personX,
+    );
     final nodes = _buildNodes(
       graph: graph,
       personGenerations: personGenerations,

@@ -43,7 +43,8 @@ class FamilyTreeCanvas extends StatefulWidget {
 }
 
 class _FamilyTreeCanvasState extends State<FamilyTreeCanvas> {
-  final TransformationController _transformationController = TransformationController();
+  final TransformationController _transformationController =
+      TransformationController();
   final FamilyTreeLayoutEngine _layoutEngine = const FamilyTreeLayoutEngine();
 
   Size _viewportSize = Size.zero;
@@ -128,9 +129,11 @@ class _FamilyTreeCanvasState extends State<FamilyTreeCanvas> {
                         height: node.size.height,
                         child: FamilyUnitConnector(
                           isHighlighted: widget.focusPersonId != null &&
-                              widget.graph.familyUnitByChildId[widget.focusPersonId!] == node.id,
+                              widget.graph.familyUnitByChildId[widget.focusPersonId!] ==
+                                  node.id,
                           isCollapsed: widget.collapsedFamilyUnitIds.contains(node.id),
-                          childCount: widget.graph.familyUnits[node.id]?.childrenIds.length ?? 0,
+                          childCount:
+                              widget.graph.familyUnits[node.id]?.childrenIds.length ?? 0,
                           onTap: widget.onFamilyUnitTap == null
                               ? null
                               : () => widget.onFamilyUnitTap!(node.id),
@@ -190,7 +193,6 @@ class _FamilyTreeCanvasState extends State<FamilyTreeCanvas> {
       _transformationController.value = matrix;
     });
   }
-
 
   FamilyTreeLayoutNode? _firstPersonNode(FamilyTreeLayoutResult layout) {
     for (final node in layout.nodes.values) {

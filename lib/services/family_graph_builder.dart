@@ -86,7 +86,6 @@ class FamilyGraphBuilder {
     return buildSelection(request).graph;
   }
 
-
   Set<String> _resolveMatchedPersonIds(
     FamilyGraph graph,
     FamilyGraphBuildRequest request,
@@ -528,7 +527,6 @@ class FamilyGraphBuilder {
       _collectDescendants(graph, childId, visible, collapsedFamilyUnitIds);
     }
   }
-
 
   Set<String> _visibleChildrenOf(
     FamilyGraph graph,
