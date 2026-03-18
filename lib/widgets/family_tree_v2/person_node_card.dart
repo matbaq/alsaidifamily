@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/person.dart';
 
+/// Readable V2 person-card widget designed to work well with Arabic names.
 class PersonNodeCard extends StatelessWidget {
   const PersonNodeCard({
     super.key,
@@ -139,10 +140,14 @@ class PersonNodeCard extends StatelessWidget {
       PersonGender.unknown => const Color(0xFF54606E),
     };
 
-    final top = Color.alphaBlend(base.withValues(alpha: 0.22),
-        brightness == Brightness.dark ? const Color(0xFF1A1F2B) : Colors.white);
-    final bottom = Color.alphaBlend(base.withValues(alpha: 0.12),
-        brightness == Brightness.dark ? const Color(0xFF11141C) : const Color(0xFFF7F9FF));
+    final top = Color.alphaBlend(
+      base.withValues(alpha: 0.22),
+      brightness == Brightness.dark ? const Color(0xFF1A1F2B) : Colors.white,
+    );
+    final bottom = Color.alphaBlend(
+      base.withValues(alpha: 0.12),
+      brightness == Brightness.dark ? const Color(0xFF11141C) : const Color(0xFFF7F9FF),
+    );
     final border = isFocused
         ? Color.alphaBlend(base.withValues(alpha: 0.8), Colors.white)
         : base.withValues(alpha: brightness == Brightness.dark ? 0.64 : 0.4);

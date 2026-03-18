@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/family_graph.dart';
 import '../../models/family_tree_layout_result.dart';
 
+/// Paints relationship edges for the V2 tree using layout-engine output only.
 class FamilyTreeV2Painter extends CustomPainter {
   const FamilyTreeV2Painter({
     required this.layout,

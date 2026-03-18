@@ -1,7 +1,9 @@
 import '../models/family_graph.dart';
+import '../models/family_graph_selection.dart';
 import '../models/family_unit.dart';
 import '../models/person.dart';
 
+/// Input contract for building a V2 family graph or contextual subgraph.
 class FamilyGraphBuildRequest {
   const FamilyGraphBuildRequest({
     required this.persons,
@@ -11,6 +13,7 @@ class FamilyGraphBuildRequest {
     this.searchQuery,
     this.matchedPersonIds = const <String>{},
     this.includeSiblingsForContext = true,
+    this.collapsedFamilyUnitIds = const <String>{},
   });
 
   final List<Person> persons;
@@ -20,12 +23,14 @@ class FamilyGraphBuildRequest {
   final String? searchQuery;
   final Set<String> matchedPersonIds;
   final bool includeSiblingsForContext;
+  final Set<String> collapsedFamilyUnitIds;
 }
 
+/// Builds immutable V2 family graphs and contextual selections from domain data.
 class FamilyGraphBuilder {
   const FamilyGraphBuilder();
 
-  FamilyGraph build(FamilyGraphBuildRequest request) {
+  FamilyGraphSelection buildSelection(FamilyGraphBuildRequest request) {
     final personById = <String, Person>{
       for (final person in request.persons) person.id: person,
     };
@@ -40,17 +45,144 @@ class FamilyGraphBuilder {
       familyUnits: sanitizedFamilyUnits,
     );
 
-    final includedPersonIds = _selectVisiblePersonIds(allGraph, request);
+    final matchedPersonIds = _resolveMatchedPersonIds(allGraph, request);
+    final focusPersonId = _resolveFocusPersonId(
+      graph: allGraph,
+      request: request,
+      matchedPersonIds: matchedPersonIds,
+    );
+
+    final selectionRequest = FamilyGraphBuildRequest(
+      persons: request.persons,
+      familyUnits: request.familyUnits,
+      focusPersonId: focusPersonId,
+      mode: request.mode,
+      searchQuery: request.searchQuery,
+      matchedPersonIds: matchedPersonIds,
+      includeSiblingsForContext: request.includeSiblingsForContext,
+      collapsedFamilyUnitIds: request.collapsedFamilyUnitIds,
+    );
+
+    final includedPersonIds = _selectVisiblePersonIds(allGraph, selectionRequest);
     final includedFamilyUnitIds = _selectVisibleFamilyUnits(
       allGraph,
       includedPersonIds,
     );
 
-    return _createSubgraph(
-      fullGraph: allGraph,
-      includedPersonIds: includedPersonIds,
-      includedFamilyUnitIds: includedFamilyUnitIds,
+    return FamilyGraphSelection(
+      graph: _createSubgraph(
+        fullGraph: allGraph,
+        includedPersonIds: includedPersonIds,
+        includedFamilyUnitIds: includedFamilyUnitIds,
+      ),
+      focusPersonId: focusPersonId,
+      matchedPersonIds: matchedPersonIds,
+      collapsedFamilyUnitIds: request.collapsedFamilyUnitIds,
+      query: request.searchQuery ?? '',
     );
+  }
+
+  FamilyGraph build(FamilyGraphBuildRequest request) {
+    return buildSelection(request).graph;
+  }
+
+  Set<String> _resolveMatchedPersonIds(
+    FamilyGraph graph,
+    FamilyGraphBuildRequest request,
+  ) {
+    final matched = <String>{...request.matchedPersonIds}
+      ..removeWhere((id) => !graph.persons.containsKey(id));
+
+    final query = _normalizeQuery(request.searchQuery);
+    if (query.isEmpty) {
+      return matched;
+    }
+
+    for (final person in graph.persons.values) {
+      final normalizedName = _normalizeQuery(person.fullName);
+      if (normalizedName.contains(query)) {
+        matched.add(person.id);
+      }
+    }
+
+    return matched;
+  }
+
+  String? _resolveFocusPersonId({
+    required FamilyGraph graph,
+    required FamilyGraphBuildRequest request,
+    required Set<String> matchedPersonIds,
+  }) {
+    final requestedFocus = request.focusPersonId;
+    if (requestedFocus != null && graph.persons.containsKey(requestedFocus)) {
+      if (matchedPersonIds.isEmpty || matchedPersonIds.contains(requestedFocus)) {
+        return requestedFocus;
+      }
+    }
+
+    if (matchedPersonIds.isNotEmpty) {
+      final ranked = matchedPersonIds.toList()
+        ..sort((a, b) => _compareMatchPriority(
+              graph: graph,
+              firstId: a,
+              secondId: b,
+              query: request.searchQuery ?? '',
+            ));
+      return ranked.first;
+    }
+
+    if (requestedFocus != null && graph.persons.containsKey(requestedFocus)) {
+      return requestedFocus;
+    }
+
+    if (graph.persons.isEmpty) {
+      return null;
+    }
+
+    final people = graph.persons.values.toList()
+      ..sort((a, b) => a.fullName.compareTo(b.fullName));
+    return people.first.id;
+  }
+
+  int _compareMatchPriority({
+    required FamilyGraph graph,
+    required String firstId,
+    required String secondId,
+    required String query,
+  }) {
+    final first = graph.persons[firstId];
+    final second = graph.persons[secondId];
+    if (first == null || second == null) {
+      return firstId.compareTo(secondId);
+    }
+
+    final normalizedQuery = _normalizeQuery(query);
+    final firstName = _normalizeQuery(first.fullName);
+    final secondName = _normalizeQuery(second.fullName);
+
+    final firstExact = firstName == normalizedQuery;
+    final secondExact = secondName == normalizedQuery;
+    if (firstExact != secondExact) {
+      return firstExact ? -1 : 1;
+    }
+
+    final firstStarts = firstName.startsWith(normalizedQuery);
+    final secondStarts = secondName.startsWith(normalizedQuery);
+    if (firstStarts != secondStarts) {
+      return firstStarts ? -1 : 1;
+    }
+
+    final firstParents = graph.parentsOf(firstId).length;
+    final secondParents = graph.parentsOf(secondId).length;
+    if (firstParents != secondParents) {
+      return secondParents.compareTo(firstParents);
+    }
+
+    return first.fullName.compareTo(second.fullName);
+  }
+
+  String _normalizeQuery(String? value) {
+    return (value ?? '').trim().toLowerCase();
   }
 
   List<FamilyUnit> _sanitizeFamilyUnits(
@@ -190,6 +322,7 @@ class FamilyGraphBuilder {
             personId: seed,
             visible: visible,
             includeSiblings: request.includeSiblingsForContext,
+            collapsedFamilyUnitIds: request.collapsedFamilyUnitIds,
           );
           break;
         case FamilyTreeDisplayMode.ancestors:
@@ -198,7 +331,12 @@ class FamilyGraphBuilder {
           _collectParentsForVisible(graph, visible);
           break;
         case FamilyTreeDisplayMode.descendants:
-          _collectDescendants(graph, seed, visible);
+          _collectDescendants(
+            graph,
+            seed,
+            visible,
+            request.collapsedFamilyUnitIds,
+          );
           _collectSpouses(graph, seed, visible);
           break;
         case FamilyTreeDisplayMode.full:
@@ -214,6 +352,7 @@ class FamilyGraphBuilder {
           personId: personId,
           visible: visible,
           includeSiblings: request.includeSiblingsForContext,
+          collapsedFamilyUnitIds: request.collapsedFamilyUnitIds,
         );
       }
     }
@@ -341,18 +480,19 @@ class FamilyGraphBuilder {
     required String personId,
     required Set<String> visible,
     required bool includeSiblings,
+    required Set<String> collapsedFamilyUnitIds,
   }) {
     visible.add(personId);
     _collectParents(graph, personId, visible);
     _collectSpouses(graph, personId, visible);
-    _collectChildren(graph, personId, visible);
+    _collectChildren(graph, personId, visible, collapsedFamilyUnitIds);
 
     if (includeSiblings) {
       visible.addAll(graph.siblingsOf(personId));
     }
 
     for (final spouseId in graph.spousesOf(personId)) {
-      _collectChildren(graph, spouseId, visible);
+      _collectChildren(graph, spouseId, visible, collapsedFamilyUnitIds);
     }
   }
 
@@ -367,24 +507,58 @@ class FamilyGraphBuilder {
     }
   }
 
-  void _collectDescendants(FamilyGraph graph, String personId, Set<String> visible) {
+  void _collectDescendants(
+    FamilyGraph graph,
+    String personId,
+    Set<String> visible,
+    Set<String> collapsedFamilyUnitIds,
+  ) {
     if (!visible.add(personId)) {
       return;
     }
 
     _collectSpouses(graph, personId, visible);
 
-    for (final childId in graph.childrenOf(personId)) {
-      _collectDescendants(graph, childId, visible);
+    for (final childId in _visibleChildrenOf(
+      graph,
+      personId,
+      collapsedFamilyUnitIds,
+    )) {
+      _collectDescendants(graph, childId, visible, collapsedFamilyUnitIds);
     }
+  }
+
+  Set<String> _visibleChildrenOf(
+    FamilyGraph graph,
+    String personId,
+    Set<String> collapsedFamilyUnitIds,
+  ) {
+    final children = <String>{};
+    for (final familyUnitId in graph.familyUnitsForPerson(personId)) {
+      final family = graph.familyUnits[familyUnitId];
+      if (family == null) {
+        continue;
+      }
+      final isOutgoingFamily = family.husbandId == personId || family.wifeId == personId;
+      if (!isOutgoingFamily || collapsedFamilyUnitIds.contains(familyUnitId)) {
+        continue;
+      }
+      children.addAll(family.childrenIds);
+    }
+    return children;
   }
 
   void _collectParents(FamilyGraph graph, String personId, Set<String> visible) {
     visible.addAll(graph.parentsOf(personId));
   }
 
-  void _collectChildren(FamilyGraph graph, String personId, Set<String> visible) {
-    visible.addAll(graph.childrenOf(personId));
+  void _collectChildren(
+    FamilyGraph graph,
+    String personId,
+    Set<String> visible,
+    Set<String> collapsedFamilyUnitIds,
+  ) {
+    visible.addAll(_visibleChildrenOf(graph, personId, collapsedFamilyUnitIds));
   }
 
   void _collectSpouses(FamilyGraph graph, String personId, Set<String> visible) {

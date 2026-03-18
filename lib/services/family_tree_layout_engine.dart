@@ -5,6 +5,7 @@ import '../models/family_graph.dart';
 import '../models/family_tree_layout_result.dart';
 import '../models/family_unit.dart';
 
+/// Tuning values for the V2 layout engine.
 class FamilyTreeLayoutConfig {
   const FamilyTreeLayoutConfig({
     this.personNodeSize = const Size(168, 96),
@@ -24,14 +25,14 @@ class FamilyTreeLayoutConfig {
   final double generationGap;
   final EdgeInsets canvasPadding;
 
-  double get coupleWidth =>
-      (personNodeSize.width * 2) + spouseGap;
+  double get coupleWidth => (personNodeSize.width * 2) + spouseGap;
 
   double get childStep => personNodeSize.width + siblingGap;
 
   double get familyBlockStep => coupleWidth + familyGap;
 }
 
+/// Request object passed into the V2 layout engine.
 class FamilyTreeLayoutRequest {
   const FamilyTreeLayoutRequest({
     required this.graph,
@@ -68,18 +69,35 @@ class FamilyTreeLayoutEngine {
       );
     }
 
-    final personGenerations = _computePersonGenerations(graph, request.focusPersonId);
-    final familyGenerations = _computeFamilyGenerations(graph, personGenerations);
+    final personGenerations =
+        _computePersonGenerations(graph, request.focusPersonId);
+    final familyGenerations =
+        _computeFamilyGenerations(graph, personGenerations);
 
-    final personX = _initialPersonSlots(graph, personGenerations, request.focusPersonId, config);
+    final personX = _initialPersonSlots(
+      graph,
+      personGenerations,
+      request.focusPersonId,
+      config,
+    );
 
     for (var pass = 0; pass < 3; pass++) {
       _alignFamiliesToPeople(graph, familyGenerations, personX, config);
-      _alignChildrenToFamilies(graph, familyGenerations, personGenerations, personX, config);
+      _alignChildrenToFamilies(
+        graph,
+        familyGenerations,
+        personGenerations,
+        personX,
+        config,
+      );
       _resolveGenerationCollisions(graph, personGenerations, personX, config);
     }
 
-    final familyX = _familyCentersFromPeople(graph, familyGenerations, personX);
+    final familyX = _familyCentersFromPeople(
+      graph,
+      familyGenerations,
+      personX,
+    );
     final nodes = _buildNodes(
       graph: graph,
       personGenerations: personGenerations,
