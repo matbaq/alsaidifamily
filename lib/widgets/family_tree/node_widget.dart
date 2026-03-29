@@ -80,7 +80,6 @@ class GenerationPalette {
   static Color accentForLevel(int level)  => forLevel(level)[1];
 }
 
-// ⭐ تم التحويل إلى StatelessWidget لتحسين الأداء بشكل هائل
 class NodeWidget extends StatelessWidget {
   final TreeNode node;
   final bool isSelected;
@@ -102,8 +101,8 @@ class NodeWidget extends StatelessWidget {
     final isDark      = Theme.of(context).brightness == Brightness.dark;
     final level       = generationLevel;
 
-    final Color primary = node.branchColor;
-    final Color accent = Color.lerp(node.branchColor, Colors.white, 0.28) ?? node.branchColor;
+    final primary = GenerationPalette.primaryForLevel(level);
+    final accent = GenerationPalette.accentForLevel(level);
 
     final isRoot      = node.isRoot;
     final isCollapsed = node.isCollapsed;
@@ -150,98 +149,95 @@ class NodeWidget extends StatelessWidget {
                   ),
                   if (isRoot)
                     BoxShadow(
-                      color: accent.withValues(alpha: 0.3),
-                      blurRadius: 30,
-                      spreadRadius: 4,
+                      color: accent.withValues(alpha: 0.35),
+                      blurRadius: 35,
+                      spreadRadius: 5,
                     ),
                 ],
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(22),
-                child: Stack(children: [
-                  Positioned(
-                    top: 0, left: 0, right: 0,
-                    child: Container(
-                      height: isRoot ? 6 : 4,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [primary.withValues(alpha: 0.95), accent.withValues(alpha: 0.6)],
+                child: Stack(
+                  children: [
+                    Positioned(
+                      top: 0, left: 0, right: 0,
+                      child: Container(
+                        height: isRoot ? 6 : 4,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [primary.withValues(alpha: 0.95), accent.withValues(alpha: 0.6)],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-
-                  if (isRoot)
-                    Positioned.fill(
-                      child: Opacity(
-                        opacity: 0.04,
-                        child: CustomPaint(painter: _DiamondPatternPainter(accent)),
+                    if (isRoot)
+                      Positioned.fill(
+                        child: Opacity(
+                          opacity: 0.04,
+                          child: CustomPaint(painter: _DiamondPatternPainter(accent)),
+                        ),
                       ),
-                    ),
-
-                  // زر الطي في الزاوية العلوية اليمنى
-                  if (onToggleChildren != null && hasChildren)
-                    Positioned(
-                      right: 4,
-                      top: 4,
-                      child: GestureDetector(
-                        onTap: onToggleChildren,
-                        child: Container(
-                          width: 22,
-                          height: 22,
-                          decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF1E2230) : Colors.white,
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: Colors.grey),
-                          ),
-                          child: Center(
-                            child: Text(
-                              isCollapsed ? '+${node.childrenCount}' : '-',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: isCollapsed && node.childrenCount > 9 ? 11 : 14,
-                                color: isDark ? Colors.white : Colors.black,
-                                height: 1.1,
+                    if (onToggleChildren != null && hasChildren)
+                      Positioned(
+                        right: 4,
+                        top: 4,
+                        child: GestureDetector(
+                          onTap: onToggleChildren,
+                          child: Container(
+                            width: 22,
+                            height: 22,
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF1E2230) : Colors.white,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.grey),
+                            ),
+                            child: Center(
+                              child: Text(
+                                isCollapsed ? '+${node.childrenCount}' : '-',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: isCollapsed && node.childrenCount > 9 ? 11 : 14,
+                                  color: isDark ? Colors.white : Colors.black,
+                                  height: 1.1,
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const SizedBox(height: 6),
-                      _buildAvatar(primary, accent, isDark, isRoot),
-                      const SizedBox(height: 8),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        child: Text(
-                          node.name,
-                          style: TextStyle(
-                            fontSize: isRoot ? 12.5 : 11.5,
-                            fontWeight: isRoot ? FontWeight.w800 : FontWeight.w600,
-                            color: isDark ? Colors.white : Colors.black87,
-                            height: 1.25,
-                          ),
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (hasChildren)
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const SizedBox(height: 6),
+                        _buildAvatar(primary, accent, isDark, isRoot),
+                        const SizedBox(height: 8),
                         Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: _buildBadge(primary, accent, isCollapsed),
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          child: Text(
+                            node.name,
+                            style: TextStyle(
+                              fontSize: isRoot ? 12.5 : 11.5,
+                              fontWeight: isRoot ? FontWeight.w800 : FontWeight.w600,
+                              color: isDark ? Colors.white : Colors.black87,
+                              height: 1.25,
+                            ),
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      const SizedBox(height: 4),
-                    ],
-                  ),
-                ]),
+                        if (hasChildren)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: _buildBadge(primary, accent, isCollapsed),
+                          ),
+                        const SizedBox(height: 4),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
-
             if (isRoot)
               Positioned(
                 top: -11, right: -9,
@@ -268,7 +264,6 @@ class NodeWidget extends StatelessWidget {
                   child: const Icon(Icons.star_rounded, size: 15, color: Colors.white),
                 ),
               ),
-
             Positioned(
               top: -9, left: -5,
               child: Container(
@@ -291,8 +286,6 @@ class NodeWidget extends StatelessWidget {
                 ),
               ),
             ),
-
-            // الأيقونة السفلية الافتراضية
             if (hasChildren)
               Positioned(
                 bottom: -14, left: 0, right: 0,
@@ -314,8 +307,7 @@ class NodeWidget extends StatelessWidget {
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: (isCollapsed ? Colors.orange : primary)
-                                .withValues(alpha: 0.5),
+                            color: (isCollapsed ? Colors.orange : primary).withValues(alpha: 0.5),
                             blurRadius: 10,
                           ),
                         ],
@@ -328,7 +320,6 @@ class NodeWidget extends StatelessWidget {
                   ),
                 ),
               ),
-
             if (isSelected)
               Positioned.fill(
                 child: IgnorePointer(
@@ -353,42 +344,87 @@ class NodeWidget extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         border: Border.all(
-          color: isRoot ? accent : primary.withValues(alpha: 0.6),
-          width: isRoot ? 2.5 : 1.8,
+          color: isRoot ? accent : primary.withValues(alpha: 0.7),
+          width: isRoot ? 3.0 : 2.2,
         ),
         boxShadow: [
-          BoxShadow(color: primary.withValues(alpha: 0.3), blurRadius: 10, spreadRadius: 1),
+          BoxShadow(
+            color: primary.withValues(alpha: 0.4),
+            blurRadius: 12,
+            spreadRadius: 2,
+            offset: const Offset(0, 3),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.1),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: CircleAvatar(
         radius: isRoot ? 27 : 23,
-        backgroundColor: isDark ? const Color(0xFF16181E) : Colors.white,
+        backgroundColor: Color.lerp(
+          isDark ? const Color(0xFF16181E) : Colors.white,
+          primary,
+          0.08,
+        ),
         backgroundImage: (url != null && url.isNotEmpty) ? NetworkImage(url) : null,
-        child: (url == null || url.isEmpty) ? const Icon(Icons.person) : null,
+        child: (url == null || url.isEmpty)
+            ? Icon(
+          Icons.person,
+          size: isRoot ? 32 : 26,
+          color: primary.withValues(alpha: 0.7),
+        )
+            : null,
       ),
     );
   }
 
   Widget _buildBadge(Color primary, Color accent, bool isCollapsed) {
     final c = isCollapsed ? Colors.orange.shade500 : primary;
+    final bgColor = isCollapsed
+        ? Colors.orange.shade50.withValues(alpha: 0.15)
+        : c.withValues(alpha: 0.12);
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: c.withValues(alpha: 0.12),
+        gradient: LinearGradient(
+          colors: [
+            bgColor,
+            bgColor.withValues(alpha: 0.5),
+          ],
+        ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: c.withValues(alpha: 0.35)),
+        border: Border.all(
+          color: c.withValues(alpha: 0.45),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: c.withValues(alpha: 0.2),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
             isCollapsed ? Icons.people_outline : Icons.people_rounded,
-            size: 10, color: c,
+            size: 11,
+            color: c,
           ),
-          const SizedBox(width: 3),
+          const SizedBox(width: 4),
           Text(
             '${node.childrenCount}',
-            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: c,
+              height: 1.0,
+            ),
           ),
         ],
       ),

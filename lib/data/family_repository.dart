@@ -43,11 +43,13 @@ class FamilyRepository {
   Future<void> addMember({
     required String name,
     String? fatherId,
+    String? motherId,
     bool isFemale = false,
   }) async {
     await _db.collection(collection).add({
       'name': name,
       'fatherId': fatherId,
+      'motherId': motherId,
       'photoUrl': null,
       'branchColor': null,
       'inheritToChildren': false,
@@ -66,11 +68,13 @@ class FamilyRepository {
   Future<void> addMemberRaw({
     required String name,
     String? fatherId,
+    String? motherId,
     bool isFemale = false,
   }) async {
     await _db.collection(collection).add({
       'name': name,
       'fatherId': fatherId,
+      'motherId': motherId,
       'photoUrl': null,
       'branchColor': null,
       'inheritToChildren': false,
@@ -86,15 +90,16 @@ class FamilyRepository {
     );
   }
 
-  // ⭐ تمت إضافة الدالة الجديدة هنا
   Future<String> addMemberAndReturnId({
     required String name,
     String? fatherId,
+    String? motherId,
     bool isFemale = false,
   }) async {
     final doc = await _db.collection(collection).add({
       'name': name,
       'fatherId': fatherId,
+      'motherId': motherId,
       'photoUrl': null,
       'branchColor': null,
       'inheritToChildren': false,
@@ -116,11 +121,13 @@ class FamilyRepository {
     required String id,
     required String name,
     String? fatherId,
+    String? motherId,
     bool isFemale = false,
   }) async {
     await _db.collection(collection).doc(id).update({
       'name': name,
       'fatherId': fatherId,
+      'motherId': motherId,
       'isFemale': isFemale,
       'updatedAt': FieldValue.serverTimestamp(),
     });
@@ -136,11 +143,13 @@ class FamilyRepository {
     required String id,
     required String name,
     String? fatherId,
+    String? motherId,
     bool isFemale = false,
   }) async {
     await _db.collection(collection).doc(id).update({
       'name': name,
       'fatherId': fatherId,
+      'motherId': motherId,
       'isFemale': isFemale,
       'updatedAt': FieldValue.serverTimestamp(),
     });
@@ -148,7 +157,7 @@ class FamilyRepository {
     await _addAuditLog(
       action: 'update_member',
       targetName: name,
-      details: 'تم تعديل الاسم / الأب / الجنس',
+      details: 'تم تعديل الاسم / الأب / الأم / الجنس',
     );
   }
 
@@ -168,6 +177,25 @@ class FamilyRepository {
       action: 'update_father',
       targetName: name,
       details: fatherId == null ? 'تم جعله جداً رئيسيًا' : 'تم تغيير الأب',
+    );
+  }
+
+  Future<void> updateMotherId({
+    required String id,
+    required String? motherId,
+  }) async {
+    final doc = await _db.collection(collection).doc(id).get();
+    final name = ((doc.data() ?? {})['name'] ?? 'عضو').toString();
+
+    await _db.collection(collection).doc(id).update({
+      'motherId': motherId,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    await _addAuditLog(
+      action: 'update_mother',
+      targetName: name,
+      details: motherId == null ? 'تمت إزالة الأم' : 'تم تغيير الأم',
     );
   }
 
@@ -216,7 +244,6 @@ class FamilyRepository {
     );
   }
 
-  // ⭐ الدالة الجديدة لتوريث اللون للأبناء
   Future<void> updateInheritToChildren({
     required String id,
     required bool inherit,
@@ -244,6 +271,7 @@ class FamilyRepository {
 
     await _db.collection(collection).doc(id).update({
       'fatherId': null,
+      'motherId': null,
       'updatedAt': FieldValue.serverTimestamp(),
     });
 

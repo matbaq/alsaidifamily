@@ -4,21 +4,21 @@ class FamilyMember {
   final String id;
   final String name;
   final String? fatherId;
+  final String? motherId;
   final String? photoUrl;
   final String? branchColor;
   final bool inheritToChildren;
-
-  // ⭐ جديد
   final bool isFemale;
 
   FamilyMember({
     required this.id,
     required this.name,
     this.fatherId,
+    this.motherId,
     this.photoUrl,
     this.branchColor,
     this.inheritToChildren = false,
-    this.isFemale = false, // ⭐ افتراضي ذكر
+    this.isFemale = false,
   });
 
   factory FamilyMember.fromDoc(DocumentSnapshot doc) {
@@ -28,11 +28,10 @@ class FamilyMember {
       id: doc.id,
       name: (data['name'] ?? '').toString(),
       fatherId: data['fatherId'] as String?,
+      motherId: data['motherId'] as String?,
       photoUrl: data['photoUrl'] as String?,
       branchColor: data['branchColor'] as String?,
       inheritToChildren: (data['inheritToChildren'] as bool?) ?? false,
-
-      // ⭐ قراءة الجنس
       isFemale: (data['isFemale'] as bool?) ?? false,
     );
   }
@@ -40,13 +39,11 @@ class FamilyMember {
   Map<String, dynamic> toMap() => {
     'name': name,
     'fatherId': fatherId,
+    'motherId': motherId,
     'photoUrl': photoUrl,
     'branchColor': branchColor,
     'inheritToChildren': inheritToChildren,
-
-    // ⭐ تخزين الجنس
     'isFemale': isFemale,
-
     'updatedAt': FieldValue.serverTimestamp(),
   };
 }
@@ -54,13 +51,13 @@ class FamilyMember {
 class MemberDraft {
   final String name;
   final String? fatherId;
-
-  // ⭐ جديد
+  final String? motherId;
   final bool isFemale;
 
   MemberDraft({
     required this.name,
     this.fatherId,
+    this.motherId,
     this.isFemale = false,
   });
 }

@@ -1,13 +1,11 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/rendering.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:printing/printing.dart';
@@ -21,7 +19,6 @@ import '../data/family_repository.dart';
 import '../models/family_member.dart';
 import '../models/tree_node.dart';
 import '../widgets/family_tree/custom_family_tree_view.dart';
-import '../widgets/family_tree/node_widget.dart'; // ⭐ تم إرجاع هذا الاستيراد لحل المشكلة
 import '../utils/relationship_utils.dart';
 import '../services/security_service.dart';
 import '../services/privacy_service.dart';
@@ -29,8 +26,6 @@ import 'family_women_page.dart';
 import 'pin_management_page.dart';
 import 'admin_panel_page.dart';
 import 'private_family_tree_page.dart';
-
-final FirebaseFirestore _db = FirebaseFirestore.instance;
 
 Color? _parseHexColor(String? hex) {
   if (hex == null || hex.trim().isEmpty) return null;
@@ -44,7 +39,7 @@ Color? _parseHexColor(String? hex) {
 }
 
 String _toHex(Color c) =>
-    '#${c.value.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
+    '#${c.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
 
 class AppColors {
   static const bg        = Color(0xFF0D0F14);
@@ -55,6 +50,24 @@ class AppColors {
   static const goldDark  = Color(0xFFB8860B);
   static const text      = Color(0xFFF0F2FF);
   static const textSub   = Color(0xFF8892AA);
+}
+
+class GenerationPalette {
+  static Color primaryForLevel(int level) {
+    const colors = [
+      Color(0xFF1e3c72), Color(0xFF2d6a4f), Color(0xFFb08d57),
+      Color(0xFF6B2D8B), Color(0xFF006d77), Color(0xFF9d0208),
+    ];
+    return colors[level % colors.length];
+  }
+
+  static Color accentForLevel(int level) {
+    const colors = [
+      Color(0xFF2a5298), Color(0xFF40916c), Color(0xFFd4af37),
+      Color(0xFF8e44ad), Color(0xFF83c5be), Color(0xFFdc2f02),
+    ];
+    return colors[level % colors.length];
+  }
 }
 
 class FamilyTreePage extends StatefulWidget {
@@ -92,8 +105,6 @@ class _FamilyTreePageState extends State<FamilyTreePage>
   bool _isBottomSheetOpen = false;
   bool _showSearch = false;
 
-  PalettePreset _palettePreset = GenerationPalette.currentPreset;
-
   Map<String, Offset> _nodeCenters = {};
   Rect? _treeBounds;
 
@@ -105,8 +116,8 @@ class _FamilyTreePageState extends State<FamilyTreePage>
   String _indexQuery = '';
 
   AnimationController? _zoomAC;
-  static const double _minScale = 0.06;
-  static const double _maxScale = 3.0;
+  static const double _minScale = 0.001;
+  static const double _maxScale = 4.0;
 
   List<FamilyMember>? _cachedAll;
   String _cachedQuery = '';
@@ -119,7 +130,23 @@ class _FamilyTreePageState extends State<FamilyTreePage>
 
   bool get _isAdmin => _auth.currentUser != null;
 
-  static const double _topOffset = 130.0;
+  static const double _baseTopOffset = 130.0;
+
+  double _effectiveTopOffset(BuildContext context) {
+    final safeTop = MediaQuery.of(context).padding.top;
+    final searchExtra = _showSearch ? 58.0 : 0.0;
+    return _baseTopOffset + (safeTop > 24 ? 10.0 : 0.0) + searchExtra;
+  }
+
+  double _searchBarTop(BuildContext context) {
+    return MediaQuery.of(context).padding.top + 54.0;
+  }
+
+  double _memberCountTop(BuildContext context) {
+    final base = MediaQuery.of(context).padding.top + 62.0;
+    if (!_showSearch) return base;
+    return _searchBarTop(context) + 52.0;
+  }
 
   static const String _supportEmail = 'zker2003@gmail.com';
   static const String _supportPhone = '9109999979';
@@ -179,13 +206,29 @@ class _FamilyTreePageState extends State<FamilyTreePage>
     final children = all.where((m) => m.fatherId == id).toList();
     if (children.isEmpty) return;
 
-    if (level >= 2) {
+    if (level >= 5) {
       _collapsedIds.add(id);
     }
 
     for (final child in children) {
       _collapseSubtree(child.id, all, level + 1);
     }
+  }
+
+  void _expandAll(List<FamilyMember> all) {
+    setState(() {
+      _collapsedIds.clear();
+    });
+  }
+
+  void _collapseAll(List<FamilyMember> all) {
+    setState(() {
+      final idsWithChildren =
+      all.map((x) => x.fatherId).whereType<String>().toSet();
+      _collapsedIds
+        ..clear()
+        ..addAll(idsWithChildren);
+    });
   }
 
   void _viewFullTree(List<FamilyMember> all) {
@@ -208,19 +251,11 @@ class _FamilyTreePageState extends State<FamilyTreePage>
     WidgetsBinding.instance.addPostFrameCallback((_) => _fitTree());
   }
 
-  void _expandAll(List<FamilyMember> all) {
-    setState(() {
-      _collapsedIds.clear();
-    });
-  }
-
-  void _collapseAll(List<FamilyMember> all) {
-    setState(() {
-      final idsWithChildren =
-      all.map((x) => x.fatherId).whereType<String>().toSet();
-      _collapsedIds
-        ..clear()
-        ..addAll(idsWithChildren);
+  void _resetView() {
+    _treeController.value = Matrix4.identity();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _fitTree();
     });
   }
 
@@ -232,30 +267,45 @@ class _FamilyTreePageState extends State<FamilyTreePage>
 
     const pad = 40.0;
     final availableW = screen.width;
+    final topOffset = _effectiveTopOffset(context);
     final availableH =
-    (screen.height - _topOffset).clamp(200.0, screen.height);
+    (screen.height - topOffset).clamp(200.0, screen.height);
 
     final sx = availableW / (b.width + pad * 2);
     final sy = availableH / (b.height + pad * 2);
 
-    double minReadableScale;
-    final totalMembers = _cachedAll?.length ?? 0;
-
-    if (totalMembers >= 800) {
-      minReadableScale = 0.16;
-    } else if (totalMembers >= 400) {
-      minReadableScale = 0.13;
-    } else {
-      minReadableScale = 0.10;
-    }
-
-    final scale = (sx < sy ? sx : sy).clamp(minReadableScale, 2.2);
+    final scale = (sx < sy ? sx : sy).clamp(0.60, 2.4);
 
     final tx = (availableW - b.width * scale) / 2 - b.left * scale;
     final ty = (availableH - b.height * scale) / 2 - b.top * scale;
 
     _treeController.value = Matrix4.identity()
-      ..translate(tx, ty + _topOffset)
+      ..translate(tx, ty + topOffset)
+      ..scale(scale);
+  }
+
+  void _fitTreeInitialLoose() {
+    if (_treeBounds == null) return;
+
+    final b = _treeBounds!;
+    final screen = MediaQuery.of(context).size;
+
+    const pad = 40.0;
+    final availableW = screen.width;
+    final topOffset = _effectiveTopOffset(context);
+    final availableH =
+    (screen.height - topOffset).clamp(200.0, screen.height);
+
+    final sx = availableW / (b.width + pad * 2);
+    final sy = availableH / (b.height + pad * 2);
+
+    final scale = (sx < sy ? sx : sy).clamp(0.72, 1.1);
+
+    final tx = (availableW - b.width * scale) / 2 - b.left * scale;
+    final ty = (availableH - b.height * scale) / 2 - b.top * scale;
+
+    _treeController.value = Matrix4.identity()
+      ..translate(tx, ty + topOffset)
       ..scale(scale);
   }
 
@@ -298,7 +348,7 @@ class _FamilyTreePageState extends State<FamilyTreePage>
     final screen = MediaQuery.of(context).size;
     final focal = Offset(
       screen.width / 2,
-      (screen.height + _topOffset) / 2,
+      (screen.height + _effectiveTopOffset(context)) / 2,
     );
 
     final next = Matrix4.identity()
@@ -318,7 +368,7 @@ class _FamilyTreePageState extends State<FamilyTreePage>
     final sc = _treeController.value.getMaxScaleOnAxis();
 
     final tx = screen.width / 2 - center.dx * sc;
-    final ty = (screen.height + _topOffset) / 2 - center.dy * sc;
+    final ty = (screen.height + _effectiveTopOffset(context)) / 2 - center.dy * sc;
 
     final target = Matrix4.identity()..translate(tx, ty)..scale(sc);
 
@@ -355,24 +405,6 @@ class _FamilyTreePageState extends State<FamilyTreePage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _centerOn(id);
     });
-  }
-
-  void _focusOnNode(String id) {
-    if (_nodeCenters.isEmpty) return;
-
-    final center = _nodeCenters[id];
-    if (center == null) return;
-
-    final matrix = Matrix4.identity();
-
-    matrix.translate(
-      -center.dx + MediaQuery.of(context).size.width / 2,
-      -center.dy + MediaQuery.of(context).size.height / 2,
-    );
-
-    matrix.scale(1.3);
-
-    _treeController.value = matrix;
   }
 
   void _showGrandchildrenOf(FamilyMember m, List<FamilyMember> all) {
@@ -519,6 +551,20 @@ class _FamilyTreePageState extends State<FamilyTreePage>
     );
   }
 
+  Future<Uint8List?> _captureTreePng({double pixelRatio = 2.0}) async {
+    try {
+      final boundary = _treeShotKey.currentContext?.findRenderObject()
+      as RenderRepaintBoundary?;
+      if (boundary == null) return null;
+
+      final image = await boundary.toImage(pixelRatio: pixelRatio);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      return byteData?.buffer.asUint8List();
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> exportTreeImage() async {
     try {
       final bytes = await _captureTreePng(pixelRatio: 3.0);
@@ -598,7 +644,6 @@ class _FamilyTreePageState extends State<FamilyTreePage>
 
       addAllDescendants(rootId);
 
-      // إضافة الآباء فوق العضو الحالي حتى يبقى السياق واضح
       String? pid = all.where((x) => x.id == rootId).firstOrNull?.fatherId;
       while (pid != null) {
         visible.add(pid);
@@ -672,20 +717,6 @@ class _FamilyTreePageState extends State<FamilyTreePage>
     return all.where((m) => visible.contains(m.id)).toList();
   }
 
-  List<TreeNode> _buildTree(
-      List<FamilyMember> filtered,
-      List<FamilyMember> all,
-      AccessController access,
-      PrivacySettings privacy,
-      ) {
-    final roots = filtered.where((m) => m.fatherId == null).toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
-
-    return roots
-        .map((r) => _buildNode(r, filtered, all, access, privacy))
-        .toList();
-  }
-
   FamilyMember? _findById(String? id, List<FamilyMember> all) {
     if (id == null) return null;
     for (final m in all) {
@@ -710,7 +741,6 @@ class _FamilyTreePageState extends State<FamilyTreePage>
         return fatherColor;
       }
 
-      // إذا الأب عنده لون لكن الوراثة متوقفة نتوقف هنا
       if (fatherColor != null && !father.inheritToChildren) {
         break;
       }
@@ -757,6 +787,20 @@ class _FamilyTreePageState extends State<FamilyTreePage>
     );
   }
 
+  List<TreeNode> _buildTree(
+      List<FamilyMember> filtered,
+      List<FamilyMember> all,
+      AccessController access,
+      PrivacySettings privacy,
+      ) {
+    final roots = filtered.where((m) => m.fatherId == null).toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+
+    return roots
+        .map((r) => _buildNode(r, filtered, all, access, privacy))
+        .toList();
+  }
+
   void _recompute(
       List<FamilyMember> all,
       AccessController access,
@@ -776,20 +820,6 @@ class _FamilyTreePageState extends State<FamilyTreePage>
     _cachedCollapsed = Set.from(_collapsedIds);
     _cachedFiltered = _filter(all, access, privacy);
     _cachedRoots = _buildTree(_cachedFiltered, all, access, privacy);
-  }
-
-  Future<Uint8List?> _captureTreePng({double pixelRatio = 2.0}) async {
-    try {
-      final boundary = _treeShotKey.currentContext?.findRenderObject()
-      as RenderRepaintBoundary?;
-      if (boundary == null) return null;
-
-      final image = await boundary.toImage(pixelRatio: pixelRatio);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      return byteData?.buffer.asUint8List();
-    } catch (_) {
-      return null;
-    }
   }
 
   Future<void> _printTree() async {
@@ -1178,6 +1208,7 @@ class _FamilyTreePageState extends State<FamilyTreePage>
             await _repo.addMemberRaw(
               name: draft.name,
               fatherId: draft.fatherId,
+              motherId: draft.motherId,
               isFemale: draft.isFemale,
             );
           }
@@ -1203,6 +1234,7 @@ class _FamilyTreePageState extends State<FamilyTreePage>
             final newFatherId = await _repo.addMemberAndReturnId(
               name: draft.name,
               fatherId: draft.fatherId,
+              motherId: draft.motherId,
               isFemale: draft.isFemale,
             );
 
@@ -1237,6 +1269,7 @@ class _FamilyTreePageState extends State<FamilyTreePage>
               id: m.id,
               name: draft.name,
               fatherId: draft.fatherId,
+              motherId: draft.motherId,
               isFemale: draft.isFemale,
             );
           }
@@ -1745,11 +1778,14 @@ class _FamilyTreePageState extends State<FamilyTreePage>
                 _setInitialCollapse(all);
                 _recompute(all, access, privacy);
 
+                final safeBottom = MediaQuery.of(context).padding.bottom;
+                final topOffset = _effectiveTopOffset(context);
+
                 return Stack(
                   children: [
                     _buildBackground(isDark),
                     Positioned.fill(
-                      top: _topOffset,
+                      top: topOffset,
                       child: RepaintBoundary(
                         key: _treeShotKey,
                         child: _buildTreeView(isDark, access),
@@ -1758,33 +1794,53 @@ class _FamilyTreePageState extends State<FamilyTreePage>
                     _buildAppBar(isDark),
                     if (_showSearch)
                       Positioned(
-                        top: 90,
+                        top: _searchBarTop(context),
                         left: 16,
                         right: 16,
                         child: _buildSearchBar(isDark),
                       ),
                     Positioned(
-                      top: MediaQuery.of(context).padding.top + 62,
+                      top: _memberCountTop(context),
                       left: 16,
                       child: _buildMemberCount(all, access, privacy),
                     ),
                     if (_isAdmin)
                       Positioned(
-                        bottom: 24,
+                        bottom: safeBottom + 16,
                         right: 16,
                         child: _buildFAB(all),
                       ),
                     Positioned(
-                      bottom: 24,
+                      bottom: safeBottom + 16,
                       left: 16,
                       child: Column(
                         children: [
-                          _zoomBtn(Icons.add_rounded, () => _zoomBy(1.18), isDark),
+                          _zoomBtn(
+                            Icons.add_rounded,
+                                () => _zoomBy(1.18),
+                            isDark,
+                            tooltip: 'تكبير',
+                          ),
                           const SizedBox(height: 10),
                           _zoomBtn(
                             Icons.remove_rounded,
                                 () => _zoomBy(1 / 1.18),
                             isDark,
+                            tooltip: 'تصغير',
+                          ),
+                          const SizedBox(height: 10),
+                          _zoomBtn(
+                            Icons.fit_screen_rounded,
+                            _fitTree,
+                            isDark,
+                            tooltip: 'ملاءمة الشاشة',
+                          ),
+                          const SizedBox(height: 10),
+                          _zoomBtn(
+                            Icons.center_focus_strong_rounded,
+                            _resetView,
+                            isDark,
+                            tooltip: 'إعادة الضبط',
                           ),
                         ],
                       ),
@@ -2201,6 +2257,7 @@ class _FamilyTreePageState extends State<FamilyTreePage>
           await _repo.addMemberRaw(
             name: draft.name,
             fatherId: draft.fatherId,
+            motherId: draft.motherId,
             isFemale: draft.isFemale,
           );
         }
@@ -2286,26 +2343,34 @@ class _FamilyTreePageState extends State<FamilyTreePage>
     );
   }
 
-  Widget _zoomBtn(IconData icon, VoidCallback onTap, bool isDark) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 42,
-        height: 42,
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.surface : Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: isDark ? AppColors.border : Colors.grey.shade200,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.12),
-              blurRadius: 14,
+  Widget _zoomBtn(
+      IconData icon,
+      VoidCallback onTap,
+      bool isDark, {
+        String? tooltip,
+      }) {
+    return Tooltip(
+      message: tooltip ?? '',
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.surface : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isDark ? AppColors.border : Colors.grey.shade200,
             ),
-          ],
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 14,
+              ),
+            ],
+          ),
+          child: Icon(icon, color: AppColors.gold, size: 22),
         ),
-        child: Icon(icon, color: AppColors.gold, size: 22),
       ),
     );
   }
@@ -2978,6 +3043,10 @@ class _AddEditMemberPageState extends State<AddEditMemberPage> {
   String _searchFather = '';
   bool _showFatherList = false;
 
+  String? _motherId;
+  String _searchMother = '';
+  bool _showMotherList = false;
+
   bool _isFemale = false;
   bool _userClearedFather = false;
   late final bool _isAddChildFlow;
@@ -2987,7 +3056,9 @@ class _AddEditMemberPageState extends State<AddEditMemberPage> {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.initial?.name ?? '');
     _fatherId = widget.initial?.fatherId ?? widget.presetFatherId;
+    _motherId = widget.initial?.motherId;
     _showFatherList = _fatherId == null;
+    _showMotherList = _motherId == null;
 
     _isFemale = widget.initial?.isFemale ?? false;
     _isAddChildFlow = widget.presetFatherId != null && widget.initial == null;
@@ -3042,18 +3113,39 @@ class _AddEditMemberPageState extends State<AddEditMemberPage> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
+  List<FamilyMember> _filteredFathers() {
     final q = _norm(_searchFather.toLowerCase());
-    final filtered = widget.members
+    return widget.members
         .where((m) =>
     m.id != widget.initial?.id &&
+        !m.isFemale &&
         _norm(m.name.toLowerCase()).contains(q))
         .toList()
       ..sort((a, b) => a.name.compareTo(b.name));
+  }
+
+  List<FamilyMember> _filteredMothers() {
+    final q = _norm(_searchMother.toLowerCase());
+    return widget.members
+        .where((m) =>
+    m.id != widget.initial?.id &&
+        m.isFemale &&
+        _norm(m.name.toLowerCase()).contains(q))
+        .toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filteredFathers = _filteredFathers();
+    final filteredMothers = _filteredMothers();
 
     final selectedFather = _fatherId != null
         ? widget.members.where((m) => m.id == _fatherId).firstOrNull
+        : null;
+
+    final selectedMother = _motherId != null
+        ? widget.members.where((m) => m.id == _motherId).firstOrNull
         : null;
 
     return Scaffold(
@@ -3077,9 +3169,7 @@ class _AddEditMemberPageState extends State<AddEditMemberPage> {
                 prefixIcon: const Icon(Icons.person_rounded),
               ),
             ),
-
             const SizedBox(height: 18),
-
             Text('الجنس:', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             Row(
@@ -3110,12 +3200,9 @@ class _AddEditMemberPageState extends State<AddEditMemberPage> {
                 ),
               ],
             ),
-
             const SizedBox(height: 12),
-
             Text('الأب:', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
-
             if (selectedFather != null)
               Container(
                 padding:
@@ -3156,7 +3243,6 @@ class _AddEditMemberPageState extends State<AddEditMemberPage> {
                   ],
                 ),
               ),
-
             if (selectedFather != null)
               Align(
                 alignment: Alignment.centerRight,
@@ -3173,7 +3259,6 @@ class _AddEditMemberPageState extends State<AddEditMemberPage> {
                   ),
                 ),
               ),
-
             if (_showFatherList) ...[
               const SizedBox(height: 8),
               TextField(
@@ -3198,12 +3283,13 @@ class _AddEditMemberPageState extends State<AddEditMemberPage> {
                         selected: _fatherId == null,
                         onTap: () => setState(() => _fatherId = null),
                       ),
-                    ...filtered.map(
+                    ...filteredFathers.map(
                           (m) => ListTile(
                         leading: Icon(
                           Icons.person_rounded,
-                          color:
-                          _fatherId == m.id ? AppColors.gold : Colors.grey,
+                          color: _fatherId == m.id
+                              ? AppColors.gold
+                              : Colors.grey,
                         ),
                         title: Text(m.name),
                         selected: _fatherId == m.id,
@@ -3243,6 +3329,103 @@ class _AddEditMemberPageState extends State<AddEditMemberPage> {
             ] else ...[
               const Spacer(),
             ],
+            const SizedBox(height: 12),
+            Text('الأم:', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+
+            if (selectedMother != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.gold.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: AppColors.gold.withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.check_circle_rounded,
+                      color: AppColors.gold,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        selectedMother.name,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => setState(() {
+                        _motherId = null;
+                        _showMotherList = true;
+                      }),
+                      child: const Icon(
+                        Icons.clear_rounded,
+                        size: 18,
+                        color: Colors.red,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            if (selectedMother != null)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () =>
+                      setState(() => _showMotherList = !_showMotherList),
+                  icon: Icon(
+                    _showMotherList ? Icons.expand_less : Icons.expand_more,
+                  ),
+                  label: Text(
+                    _showMotherList ? 'إخفاء القائمة' : 'تغيير الأم',
+                  ),
+                ),
+              ),
+
+            if (_showMotherList) ...[
+              const SizedBox(height: 8),
+              TextField(
+                decoration: InputDecoration(
+                  hintText: 'بحث عن الأم...',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  prefixIcon: const Icon(Icons.search_rounded),
+                ),
+                onChanged: (v) => setState(() => _searchMother = v),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 180,
+                child: ListView(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.block_rounded, color: Colors.grey),
+                      title: const Text('بلا أم'),
+                      selected: _motherId == null,
+                      onTap: () => setState(() => _motherId = null),
+                    ),
+                    ...filteredMothers.map(
+                          (m) => ListTile(
+                        leading: Icon(
+                          Icons.person_rounded,
+                          color: _motherId == m.id ? AppColors.gold : Colors.grey,
+                        ),
+                        title: Text(m.name),
+                        selected: _motherId == m.id,
+                        selectedColor: AppColors.gold,
+                        onTap: () => setState(() => _motherId = m.id),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
 
             const SizedBox(height: 16),
 
@@ -3261,6 +3444,7 @@ class _AddEditMemberPageState extends State<AddEditMemberPage> {
                   MemberDraft(
                     name: _nameCtrl.text.trim(),
                     fatherId: _fatherId,
+                    motherId: _motherId,
                     isFemale: _isFemale,
                   ),
                 ),
