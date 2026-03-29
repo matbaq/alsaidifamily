@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:path_provider/path_provider.dart';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -38,8 +39,14 @@ Color? _parseHexColor(String? hex) {
   return Color(v);
 }
 
-String _toHex(Color c) =>
-    '#${c.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
+String _toHex(Color c) {
+  final a = (c.a * 255).round();
+  final r = (c.r * 255).round();
+  final g = (c.g * 255).round();
+  final b = (c.b * 255).round();
+  final argb = (a << 24) | (r << 16) | (g << 8) | b;
+  return '#${argb.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
+}
 
 class AppColors {
   static const bg        = Color(0xFF0D0F14);
@@ -578,7 +585,7 @@ class _FamilyTreePageState extends State<FamilyTreePage>
         return;
       }
 
-      final dir = await Directory.systemTemp.createTemp('tree_share_');
+      final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/family_tree.png');
       await file.writeAsBytes(bytes);
 
